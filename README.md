@@ -4,6 +4,8 @@ Single-shot setup script for running Starlink residential on OpenWrt 25.x.
 
 Tested on **GL-iNet Beryl AX (MT3000)** running **OpenWrt 25.12.0**.
 
+**[Documentation site](https://bigmalloy.github.io/starlink-openwrt/)**
+
 ## What it does
 
 1. **IPv6 WAN** — creates/updates `wan6` interface with DHCPv6-PD
@@ -45,4 +47,4 @@ Full IPv6 test: https://test-ipv6.com
 
 **BBR** only affects TCP sessions terminating at the router (e.g. WireGuard, OpenVPN). It has no effect on flows from LAN clients passing through NAT.
 
-**Prefix lifetimes** — Starlink sends very short DHCPv6-PD lifetimes (~279s). The odhcpd config overrides these so LAN clients get stable addresses (3600s preferred, 7200s valid) while the router renews internally.
+**Prefix lifetimes vs prefix changes** — Starlink sends very short DHCPv6-PD lifetimes (~279s valid, ~129s preferred). The odhcpd fix overrides the *advertised* lifetimes so LAN clients get stable addresses (3600s preferred, 7200s valid) while the router renews the prefix internally on Starlink's schedule. This fixes the common case of address churn from frequent renewals. It does *not* prevent address changes if Starlink genuinely assigns a new prefix (e.g. after a dish reboot or beam handoff) — in that case LAN clients will renumber regardless.

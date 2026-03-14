@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>starlink-openwrt</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --code-bg: #1f2937;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 2rem 0;
+    text-align: center;
+  }
+  header h1 { font-size: 2rem; font-weight: 600; margin-bottom: 0.5rem; }
+  header p { color: var(--muted); font-size: 1rem; }
+  header .badges { margin-top: 1rem; display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; }
+  header .badge {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 2rem;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .container { max-width: 800px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  .install-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 2rem 0;
+  }
+  .install-box h2 { font-size: 1rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+  pre {
+    background: var(--code-bg);
+    border-radius: 6px;
+    padding: 1rem;
+    overflow-x: auto;
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+  code { font-family: 'SF Mono', 'Fira Code', monospace; }
+  pre code { color: var(--text); }
+
+  .steps { margin: 2rem 0; }
+  .steps h2 { font-size: 1.25rem; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+  .step {
+    display: flex;
+    gap: 1rem;
+    padding: 0.875rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .step:last-child { border-bottom: none; }
+  .step-num {
+    flex-shrink: 0;
+    width: 1.75rem;
+    height: 1.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    color: var(--accent);
+    font-weight: 600;
+    margin-top: 0.1rem;
+  }
+  .step-body strong { display: block; margin-bottom: 0.2rem; }
+  .step-body p { color: var(--muted); font-size: 0.9rem; }
+  .step-body code { background: var(--code-bg); padding: 0.1em 0.4em; border-radius: 3px; font-size: 0.85em; color: var(--text); }
+
+  .notes { margin: 2rem 0; }
+  .notes h2 { font-size: 1.25rem; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+  .note {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 6px 6px 0;
+    padding: 0.875rem 1rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+  }
+  .note strong { display: block; margin-bottom: 0.25rem; }
+  .note p { color: var(--muted); }
+  .note code { background: var(--code-bg); padding: 0.1em 0.4em; border-radius: 3px; font-size: 0.85em; color: var(--text); }
+  .note.warn { border-left-color: var(--yellow); }
+
+  .verify { margin: 2rem 0; }
+  .verify h2 { font-size: 1.25rem; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 2rem 0;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+  footer a { color: var(--muted); }
+  footer a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <h1>starlink-openwrt</h1>
+    <p>Single-shot setup script for Starlink residential on OpenWrt 25.x</p>
+    <div class="badges">
+      <span class="badge">OpenWrt 25.12.0</span>
+      <span class="badge">GL-iNet Beryl AX (MT3000)</span>
+      <span class="badge">Starlink residential</span>
+      <span class="badge">fw4 / nftables</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="install-box">
+    <h2>Quick install</h2>
+    <pre><code>scp -O starlink-setup.sh root@192.168.1.1:/tmp/
+ssh root@192.168.1.1 "sh /tmp/starlink-setup.sh"</code></pre>
+  </div>
+
+  <div class="steps">
+    <h2>What the script does</h2>
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>IPv6 WAN</strong>
+        <p>Creates or updates the <code>wan6</code> interface with DHCPv6-PD, <code>reqprefix=auto</code>.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>odhcpd — prefix lifetime fix</strong>
+        <p>Starlink sends very short DHCPv6-PD lifetimes (~279s valid, ~129s preferred). odhcpd forwards these to LAN clients by default, causing constant address churn. The script overrides the advertised lifetimes to 3600s/7200s — the router renews internally while clients get stable addresses.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>DNS</strong>
+        <p>Disables peerdns on WAN and WAN6. Sets Cloudflare (1.1.1.1, 1.0.0.1) and Google (8.8.8.8, 8.8.4.4) resolvers with IPv6 equivalents.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>Flow offloading</strong>
+        <p>Enables software offloading, disables hardware offloading. Hardware offloading (MediaTek NPU) bypasses the Linux qdisc layer entirely, making fq_codel inactive. Software offloading keeps flows in the Linux stack so qdiscs apply.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <strong>MSS clamping</strong>
+        <p>Sets <code>mtu_fix 1</code> via uci. On OpenWrt 24.10+ (firewall4 commit 698a533), fw4 generates both ingress (<code>mangle_forward</code>) and egress (<code>mangle_postrouting</code>) clamp rules. Fixes large downloads stalling on Starlink's encapsulated link.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <strong>Kernel optimisation</strong>
+        <p>Installs <code>kmod-tcp-bbr</code> (via apk on 25.x, opkg fallback). Appends a tagged sysctl block: BBR congestion control, fq_codel as default qdisc, TCP fast open, MTU probing, IPv6 forwarding, and conntrack timeout tuning. Block is replaced (not duplicated) on re-runs.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h2>Technical notes</h2>
+
+    <div class="note warn">
+      <strong>Prefix lifetimes vs prefix changes</strong>
+      <p>The odhcpd fix addresses <em>lifetime churn</em> — frequent renewals where Starlink reissues the same prefix with short lifetimes. LAN clients keep their addresses while the router renews in the background. It does <em>not</em> prevent renumbering if Starlink assigns a genuinely new prefix (dish reboot, beam handoff). In that case, LAN clients will get new addresses regardless.</p>
+    </div>
+
+    <div class="note">
+      <strong>BBR scope</strong>
+      <p><code>net.ipv4.tcp_congestion_control = bbr</code> on the router only affects TCP sessions <em>terminating at the router</em> — WireGuard, OpenVPN, a local proxy or file server. It has no effect on flows from LAN clients passing through NAT. For a plain NAT router this setting is nearly a no-op.</p>
+    </div>
+
+    <div class="note">
+      <strong>fw4 drop-in files broken on 25.12</strong>
+      <p>fw4 renders its entire ruleset as a single inline nftables script. A drop-in containing a top-level <code>table inet fw4</code> block causes a syntax conflict and firewall restart fails. Do not use the drop-in approach — <code>mtu_fix 1</code> is the correct fix for 24.10+.</p>
+    </div>
+
+    <div class="note">
+      <strong>fq_codel without a shaper</strong>
+      <p>fq_codel needs back pressure to counter bufferbloat. The bottleneck on Starlink is at the satellite link, not the LAN-side ethernet port where BQL applies. Without a software shaper on the WAN side, fq_codel still provides flow hashing and some AQM benefit but cannot fully control bufferbloat. If you add SQM later, CAKE becomes the stronger choice.</p>
+    </div>
+  </div>
+
+  <div class="verify">
+    <h2>Verification</h2>
+    <p style="color: var(--muted); margin-bottom: 1rem; font-size: 0.9rem;">Wait ~30 seconds after the script completes for IPv6 to come up.</p>
+    <pre><code># Check WAN IPv6 and default route
+ssh root@192.168.1.1 "ip -6 addr show eth0; ip -6 route show default"
+
+# End-to-end IPv6
+ping6 ipv6.google.com
+
+# Full test
+https://test-ipv6.com</code></pre>
+  </div>
+
+</div>
+
+<footer>
+  <div class="container">
+    <a href="https://github.com/bigmalloy/starlink-openwrt">github.com/bigmalloy/starlink-openwrt</a>
+  </div>
+</footer>
+
+</body>
+</html>
