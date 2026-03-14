@@ -109,23 +109,18 @@ if command -v apk >/dev/null 2>&1; then
     apk add kmod-tcp-bbr >/dev/null 2>&1 \
         && echo "      kmod-tcp-bbr installed (apk)." \
         || echo "      WARNING: kmod-tcp-bbr install failed. Run 'apk add kmod-tcp-bbr' manually."
-    # ndisc6 provides rdisc6, which sends Router Solicitation packets to keep
-    # the DHCPv6-PD /56 delegation alive. Without it, Starlink may stop
-    # delegating the /56 and fall back to a /64 after the lease expires.
-    echo "      Installing ndisc6..."
-    apk add ndisc6 >/dev/null 2>&1 \
-        && echo "      ndisc6 installed (apk)." \
-        || echo "      WARNING: ndisc6 install failed. Run 'apk add ndisc6' manually."
 else
     opkg update >/dev/null 2>&1
     echo "      Installing kmod-tcp-bbr..."
     opkg install kmod-tcp-bbr >/dev/null 2>&1 \
         && echo "      kmod-tcp-bbr installed (opkg)." \
         || echo "      WARNING: kmod-tcp-bbr install failed. Run 'opkg install kmod-tcp-bbr' manually."
-    echo "      Installing ndisc6..."
+    # ndisc6 provides rdisc6 for RS keepalive on older OpenWrt versions where
+    # odhcp6c did not handle Router Solicitations natively. On 25.x odhcp6c
+    # handles this itself; ndisc6 is not in the 25.x apk repo.
     opkg install ndisc6 >/dev/null 2>&1 \
         && echo "      ndisc6 installed (opkg)." \
-        || echo "      WARNING: ndisc6 install failed. Run 'opkg install ndisc6' manually."
+        || true
 fi
 
 # Remove any existing starlink-setup block to avoid duplicates on re-run
@@ -204,9 +199,9 @@ else
     echo "       ip -6 addr show dev $LAN_BR"
     echo "    2. Router Solicitation keepalive failure — Starlink requires the router"
     echo "       to send RS packets roughly every 60s or it stops delegating the /56"
-    echo "       and falls back to a /64. Install ndisc6 if not already installed:"
-    echo "       apk add ndisc6   (or: opkg install ndisc6)"
-    echo "       Then restart network: service network restart"
+    echo "       and falls back to a /64. On OpenWrt 25.x, odhcp6c handles this"
+    echo "       natively. Try: service network restart"
+    echo "       On older versions (23.05/24.10): opkg install ndisc6"
     echo "    3. If you still get only a /64 after fixing the keepalive, NDP proxy"
     echo "       allows LAN clients to share the WAN /64 (limited, no DHCPv6 on LAN):"
     echo "       https://openwrt.org/docs/guide-user/network/ipv6/ipv6.ndp"
