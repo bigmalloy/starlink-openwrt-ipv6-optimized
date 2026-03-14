@@ -29,7 +29,7 @@ ssh root@192.168.1.1 "ip -6 addr show eth0; ip -6 route show default"
 ping6 ipv6.google.com
 ```
 
-Full IPv6 test: https://test-ipv6.com
+Full IPv6 test: https://test-ipv6.roedu.net/
 
 ## Requirements
 
