@@ -105,16 +105,28 @@ echo "[6/6] Applying kernel optimisation (BBR, fq_codel, conntrack)..."
 
 # Install packages (try apk first for OpenWrt 25.x, fall back to opkg)
 if command -v apk >/dev/null 2>&1; then
-    echo "      Installing kmod-tcp-bbr..."
+    echo "      Installing packages (kmod-tcp-bbr, tc-full, curl)..."
     apk add kmod-tcp-bbr >/dev/null 2>&1 \
         && echo "      kmod-tcp-bbr installed (apk)." \
         || echo "      WARNING: kmod-tcp-bbr install failed. Run 'apk add kmod-tcp-bbr' manually."
+    apk add tc-full >/dev/null 2>&1 \
+        && echo "      tc-full installed (apk)." \
+        || echo "      WARNING: tc-full install failed."
+    apk add curl >/dev/null 2>&1 \
+        && echo "      curl installed (apk)." \
+        || echo "      WARNING: curl install failed."
 else
     opkg update >/dev/null 2>&1
-    echo "      Installing kmod-tcp-bbr..."
+    echo "      Installing packages (kmod-tcp-bbr, tc, curl)..."
     opkg install kmod-tcp-bbr >/dev/null 2>&1 \
         && echo "      kmod-tcp-bbr installed (opkg)." \
         || echo "      WARNING: kmod-tcp-bbr install failed. Run 'opkg install kmod-tcp-bbr' manually."
+    opkg install tc >/dev/null 2>&1 \
+        && echo "      tc installed (opkg)." \
+        || true
+    opkg install curl >/dev/null 2>&1 \
+        && echo "      curl installed (opkg)." \
+        || true
     # ndisc6 provides rdisc6 for RS keepalive on older OpenWrt versions where
     # odhcp6c did not handle Router Solicitations natively. On 25.x odhcp6c
     # handles this itself; ndisc6 is not in the 25.x apk repo.
@@ -159,16 +171,16 @@ net.netfilter.nf_conntrack_icmp_timeout = 30
 net.netfilter.nf_conntrack_generic_timeout = 600
 EOF
 
-sysctl -p /etc/sysctl.conf >/dev/null 2>&1
+sysctl -p /etc/sysctl.conf >/dev/null 2>&1 || true
 echo "      Done."
 
 # --- Restart services ---
 echo ""
 echo "Restarting services..."
-service network restart   >/dev/null 2>&1 && echo "  network     OK"
-service odhcpd restart    >/dev/null 2>&1 && echo "  odhcpd      OK"
-service dnsmasq restart   >/dev/null 2>&1 && echo "  dnsmasq     OK"
-service firewall restart  >/dev/null 2>&1 && echo "  firewall    OK"
+service network restart   >/dev/null 2>&1 && echo "  network     OK" || echo "  network     FAILED"
+service odhcpd restart    >/dev/null 2>&1 && echo "  odhcpd      OK" || echo "  odhcpd      FAILED"
+service dnsmasq restart   >/dev/null 2>&1 && echo "  dnsmasq     OK" || echo "  dnsmasq     FAILED"
+service firewall restart  >/dev/null 2>&1 && echo "  firewall    OK" || echo "  firewall    FAILED"
 
 # Give DHCPv6-PD time to complete before verifying
 echo ""
@@ -187,7 +199,7 @@ ip -6 addr show dev "$WAN_DEV" | grep "inet6" || echo "  (none yet — may take 
 echo ""
 echo "--- LAN delegated prefix ---"
 LAN_GUA=$(ip -6 addr show dev "$LAN_BR" 2>/dev/null \
-    | grep "inet6" | grep "scope global" | grep -v "fe80")
+    | grep "inet6" | grep "scope global" | grep -v "fe80" || true)
 if [ -n "$LAN_GUA" ]; then
     echo "$LAN_GUA"
 else
@@ -216,8 +228,16 @@ echo "--- TCP congestion control ---"
 sysctl -n net.ipv4.tcp_congestion_control
 
 echo ""
-echo "--- Default qdisc ---"
+echo "--- Default qdisc (kernel param) ---"
 sysctl -n net.core.default_qdisc
+
+echo ""
+echo "--- Active qdisc on WAN ($WAN_DEV) ---"
+if command -v tc >/dev/null 2>&1; then
+    tc qdisc show dev "$WAN_DEV" | grep -v "^$" || echo "  (none)"
+else
+    echo "  tc not available — install tc-full to inspect"
+fi
 
 echo ""
 echo "--- MSS clamp rules ---"
