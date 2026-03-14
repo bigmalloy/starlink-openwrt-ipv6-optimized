@@ -103,16 +103,29 @@ echo "      mtu_fix enabled. fw4 will generate both ingress and egress clamp rul
 # --- 6. Kernel optimisation ---
 echo "[6/6] Applying kernel optimisation (BBR, fq_codel, conntrack)..."
 
-# Install BBR (try apk first for OpenWrt 25.x, fall back to opkg)
-echo "      Installing kmod-tcp-bbr..."
+# Install packages (try apk first for OpenWrt 25.x, fall back to opkg)
 if command -v apk >/dev/null 2>&1; then
+    echo "      Installing kmod-tcp-bbr..."
     apk add kmod-tcp-bbr >/dev/null 2>&1 \
         && echo "      kmod-tcp-bbr installed (apk)." \
         || echo "      WARNING: kmod-tcp-bbr install failed. Run 'apk add kmod-tcp-bbr' manually."
+    # ndisc6 provides rdisc6, which sends Router Solicitation packets to keep
+    # the DHCPv6-PD /56 delegation alive. Without it, Starlink may stop
+    # delegating the /56 and fall back to a /64 after the lease expires.
+    echo "      Installing ndisc6..."
+    apk add ndisc6 >/dev/null 2>&1 \
+        && echo "      ndisc6 installed (apk)." \
+        || echo "      WARNING: ndisc6 install failed. Run 'apk add ndisc6' manually."
 else
-    opkg update >/dev/null 2>&1 && opkg install kmod-tcp-bbr >/dev/null 2>&1 \
+    opkg update >/dev/null 2>&1
+    echo "      Installing kmod-tcp-bbr..."
+    opkg install kmod-tcp-bbr >/dev/null 2>&1 \
         && echo "      kmod-tcp-bbr installed (opkg)." \
         || echo "      WARNING: kmod-tcp-bbr install failed. Run 'opkg install kmod-tcp-bbr' manually."
+    echo "      Installing ndisc6..."
+    opkg install ndisc6 >/dev/null 2>&1 \
+        && echo "      ndisc6 installed (opkg)." \
+        || echo "      WARNING: ndisc6 install failed. Run 'opkg install ndisc6' manually."
 fi
 
 # Remove any existing starlink-setup block to avoid duplicates on re-run
@@ -187,15 +200,16 @@ else
     echo ""
     echo "  WARNING: No delegated prefix on LAN."
     echo "  This usually means one of:"
-    echo "    1. IPv6 is still coming up — wait 30s and re-run verification:"
+    echo "    1. IPv6 is still coming up — wait 30s and re-run:"
     echo "       ip -6 addr show dev $LAN_BR"
-    echo "    2. Your Starlink plan only provides a /64 (some low-end tiers)."
-    echo "       A /64 cannot be sub-delegated — LAN clients cannot get routable"
-    echo "       IPv6 addresses via prefix delegation. Options:"
-    echo "         a) NDP proxy: enables LAN clients to share the WAN /64"
-    echo "            (limited — max ~250 clients, no DHCPv6 on LAN)"
-    echo "            See: https://openwrt.org/docs/guide-user/network/ipv6/ipv6.ndp"
-    echo "         b) Upgrade to a Starlink plan that provides a /56 PD prefix."
+    echo "    2. Router Solicitation keepalive failure — Starlink requires the router"
+    echo "       to send RS packets roughly every 60s or it stops delegating the /56"
+    echo "       and falls back to a /64. Install ndisc6 if not already installed:"
+    echo "       apk add ndisc6   (or: opkg install ndisc6)"
+    echo "       Then restart network: service network restart"
+    echo "    3. If you still get only a /64 after fixing the keepalive, NDP proxy"
+    echo "       allows LAN clients to share the WAN /64 (limited, no DHCPv6 on LAN):"
+    echo "       https://openwrt.org/docs/guide-user/network/ipv6/ipv6.ndp"
 fi
 
 echo ""
