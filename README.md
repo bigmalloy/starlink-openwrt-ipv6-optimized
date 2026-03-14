@@ -4,8 +4,6 @@ Single-shot setup script for running Starlink residential on OpenWrt 25.x.
 
 Tested on **GL-iNet Beryl AX (MT3000)** running **OpenWrt 25.12.0**.
 
-**[Documentation site](https://bigmalloy.github.io/starlink-openwrt/)**
-
 ## What it does
 
 1. **IPv6 WAN** — creates/updates `wan6` interface with DHCPv6-PD
