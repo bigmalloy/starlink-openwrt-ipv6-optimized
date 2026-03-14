@@ -162,7 +162,10 @@ service odhcpd restart    >/dev/null 2>&1 && echo "  odhcpd      OK"
 service dnsmasq restart   >/dev/null 2>&1 && echo "  dnsmasq     OK"
 service firewall restart  >/dev/null 2>&1 && echo "  firewall    OK"
 
-# MSS clamp file is loaded automatically by fw4 during firewall restart above
+# Give DHCPv6-PD time to complete before verifying
+echo ""
+echo "Waiting 15 seconds for IPv6 to come up..."
+sleep 15
 
 echo ""
 echo "================================================"
@@ -175,7 +178,25 @@ ip -6 addr show dev "$WAN_DEV" | grep "inet6" || echo "  (none yet — may take 
 
 echo ""
 echo "--- LAN delegated prefix ---"
-ip -6 addr show dev "$LAN_BR" | grep "inet6" || echo "  (none yet)"
+LAN_GUA=$(ip -6 addr show dev "$LAN_BR" 2>/dev/null \
+    | grep "inet6" | grep "scope global" | grep -v "fe80")
+if [ -n "$LAN_GUA" ]; then
+    echo "$LAN_GUA"
+else
+    ip -6 addr show dev "$LAN_BR" | grep "inet6" || true
+    echo ""
+    echo "  WARNING: No delegated prefix on LAN."
+    echo "  This usually means one of:"
+    echo "    1. IPv6 is still coming up — wait 30s and re-run verification:"
+    echo "       ip -6 addr show dev $LAN_BR"
+    echo "    2. Your Starlink plan only provides a /64 (some low-end tiers)."
+    echo "       A /64 cannot be sub-delegated — LAN clients cannot get routable"
+    echo "       IPv6 addresses via prefix delegation. Options:"
+    echo "         a) NDP proxy: enables LAN clients to share the WAN /64"
+    echo "            (limited — max ~250 clients, no DHCPv6 on LAN)"
+    echo "            See: https://openwrt.org/docs/guide-user/network/ipv6/ipv6.ndp"
+    echo "         b) Upgrade to a Starlink plan that provides a /56 PD prefix."
+fi
 
 echo ""
 echo "--- IPv6 default route ---"
