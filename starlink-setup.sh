@@ -139,14 +139,25 @@ if grep -q "# --- starlink-setup ---" /etc/sysctl.conf 2>/dev/null; then
     sed -i '/# --- starlink-setup ---/,$d' /etc/sysctl.conf
 fi
 
-cat >> /etc/sysctl.conf << 'EOF'
+# Pick best available congestion control: CDG > BBR > cubic
+if grep -q '\bcdg\b' /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
+    CC=cdg
+    echo "      Congestion control: CDG (delay-gradient, built-in)."
+elif grep -q '\bbbr\b' /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
+    CC=bbr
+    echo "      Congestion control: BBR (CDG not available in this kernel build)."
+else
+    CC=cubic
+    echo "      Congestion control: cubic (fallback)."
+fi
+
+cat >> /etc/sysctl.conf << EOF
 
 # --- starlink-setup ---
-# CDG: delay-gradient congestion control — built into the kernel, no extra package needed.
-# Better than BBRv1 for router-terminated flows (WireGuard, local proxy): uses delay
-# signals rather than bandwidth probing, so it is fair to other flows on shared links.
+# Congestion control: CDG preferred (delay-gradient, fair to other flows).
+# Falls back to BBR if CDG is not compiled into this kernel build.
 net.core.default_qdisc = fq_codel
-net.ipv4.tcp_congestion_control = cdg
+net.ipv4.tcp_congestion_control = $CC
 net.ipv4.tcp_fastopen = 3
 net.ipv4.tcp_mtu_probing = 2
 
