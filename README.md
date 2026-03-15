@@ -48,3 +48,11 @@ Full IPv6 test: https://test-ipv6.com
 **Prefix lifetimes vs prefix changes** — Starlink sends very short DHCPv6-PD lifetimes (~279s valid, ~129s preferred). The odhcpd fix overrides the *advertised* lifetimes so LAN clients get stable addresses (3600s preferred, 7200s valid) while the router renews the prefix internally on Starlink's schedule. This fixes the common case of address churn from frequent renewals. It does *not* prevent address changes if Starlink genuinely assigns a new prefix (e.g. after a dish reboot or beam handoff) — in that case LAN clients will renumber regardless.
 
 **odhcpd option names** — the correct UCI options are `max_preferred_lifetime` and `max_valid_lifetime`. The similar-looking `preferred_lft` and `valid_lft` are not valid odhcpd options and are silently ignored. The script cleans these up automatically if present from a previous run.
+
+---
+
+## Buy me a beer
+
+If this project saved you some time, feel free to shout me a beer!
+
+[![PayPal](https://img.shields.io/badge/PayPal-Buy%20me%20a%20beer-blue?logo=paypal)](https://paypal.me/bergfirmware)
