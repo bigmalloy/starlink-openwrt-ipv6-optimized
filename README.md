@@ -11,7 +11,7 @@ Tested on **GL-iNet Beryl AX (MT3000)** running **OpenWrt 25.12.0**.
 3. **DNS** — disables peerdns, sets Cloudflare + Google resolvers
 4. **Flow offloading** — enables software offloading, disables hardware offloading (required for fq_codel to work)
 5. **MSS clamping** — sets `mtu_fix 1`; fw4 generates both ingress and egress clamp rules on OpenWrt 24.10+
-6. **Kernel** — applies sysctl block (CDG congestion control, fq_codel, conntrack tuning)
+6. **Kernel** — installs `kmod-tcp-hybla`, applies sysctl block (hybla congestion control, fq_codel, conntrack tuning)
 
 The script is idempotent — safe to re-run on an existing install.
 
@@ -43,7 +43,7 @@ Full IPv6 test: https://test-ipv6.roedu.net/
 
 **MSS clamping** uses `mtu_fix 1` via uci. The fw4 egress MSS bug (openwrt/openwrt#12112) is fixed in OpenWrt 24.10+ — both ingress and egress clamp rules are generated automatically.
 
-**CDG congestion control** — the script sets `net.ipv4.tcp_congestion_control = cdg`. CDG (CAIA Delay-Gradient) uses delay signals rather than packet loss, making it well-suited to satellite links where loss is unrelated to congestion. Unlike BBRv1 it does not aggressively probe for bandwidth, so it is fair to other flows. No extra package required — CDG is built into the kernel. Note: this only affects TCP sessions terminating at the router (WireGuard, a local proxy, etc.) — not LAN client traffic through NAT.
+**Hybla congestion control** — the script installs `kmod-tcp-hybla` and sets `net.ipv4.tcp_congestion_control = hybla`. Hybla was designed for satellite and high-latency links: standard loss-based algorithms (cubic, reno) grow their congestion window proportional to RTT, penalising high-latency connections even when there is no congestion. Hybla normalises window growth against a 25ms reference RTT so satellite connections ramp up at the same rate as local ones. It remains loss-based and fair to other flows — unlike BBRv1 which probes aggressively. If hybla is unavailable on a given kernel build the script falls back to CDG, then BBR, then cubic. Note: congestion control only affects TCP sessions terminating at the router (WireGuard, a local proxy, etc.) — not LAN client traffic through NAT.
 
 **Prefix lifetimes vs prefix changes** — Starlink sends very short DHCPv6-PD lifetimes (~279s valid, ~129s preferred). The odhcpd fix overrides the *advertised* lifetimes so LAN clients get stable addresses (3600s preferred, 7200s valid) while the router renews the prefix internally on Starlink's schedule. This fixes the common case of address churn from frequent renewals. It does *not* prevent address changes if Starlink genuinely assigns a new prefix (e.g. after a dish reboot or beam handoff) — in that case LAN clients will renumber regardless.
 

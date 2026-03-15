@@ -104,7 +104,7 @@ uci commit firewall
 echo "      mtu_fix enabled. fw4 will generate both ingress and egress clamp rules."
 
 # --- 6. Kernel optimisation ---
-echo "[6/6] Applying kernel optimisation (CDG, fq_codel, conntrack)..."
+echo "[6/6] Applying kernel optimisation (hybla, fq_codel, conntrack)..."
 
 # Install packages (try apk first for OpenWrt 25.x, fall back to opkg)
 if command -v apk >/dev/null 2>&1; then
