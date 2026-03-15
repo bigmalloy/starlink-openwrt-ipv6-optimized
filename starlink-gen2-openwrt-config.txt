@@ -1,0 +1,365 @@
+Starlink WiFi Gen2 — OpenWrt Configuration Extract
+====================================================
+Source: github.com/SpaceExplorationTechnologies/starlink-wifi-gen2
+Extracted: 2026-03-15
+Hardware: MT7629 SoC, dual-band 3x3 802.11ac, ARM Cortex-A7
+Kernel: Linux 4.4
+Firewall: iptables (not nftables/fw4)
+Package manager: opkg
+
+
+================================================================================
+FILE: openwrt/package/base-files/files/etc/sysctl.conf
+================================================================================
+
+kernel.panic=3
+kernel.core_pattern=/tmp/%e.%t.%p.%s.core
+
+net.ipv4.conf.default.arp_ignore=1
+net.ipv4.conf.all.arp_ignore=1
+net.ipv4.ip_forward=1
+net.ipv4.icmp_echo_ignore_broadcasts=1
+net.ipv4.icmp_ignore_bogus_error_responses=1
+net.ipv4.igmp_max_memberships=100
+net.ipv4.tcp_fin_timeout=30
+net.ipv4.tcp_keepalive_time=120
+net.ipv4.tcp_syncookies=1
+net.ipv4.tcp_timestamps=1
+net.ipv4.tcp_sack=1
+net.ipv4.tcp_dsack=1
+
+net.ipv6.conf.default.forwarding=1
+net.ipv6.conf.all.forwarding=1
+
+net.netfilter.nf_conntrack_acct=1
+net.netfilter.nf_conntrack_checksum=0
+net.netfilter.nf_conntrack_max=16384
+net.netfilter.nf_conntrack_tcp_timeout_established=7440
+net.netfilter.nf_conntrack_udp_timeout=60
+net.netfilter.nf_conntrack_udp_timeout_stream=180
+
+# disable bridge firewalling by default
+net.bridge.bridge-nf-call-arptables=0
+net.bridge.bridge-nf-call-ip6tables=0
+net.bridge.bridge-nf-call-iptables=0
+
+
+================================================================================
+FILE: openwrt/package/base-files/files/etc/sysctl.d/local.conf
+================================================================================
+
+# local sysctl settings can be stored in this directory
+
+
+================================================================================
+FILE: openwrt/package/base-files/files/etc/dnsmasq-sx-nominal.conf
+================================================================================
+
+# Always resolve my.starlink.com
+address=/my.starlink.com/34.120.255.244
+
+
+================================================================================
+FILE: openwrt/package/base-files/files/etc/dnsmasq-sx-captive-portal.conf
+================================================================================
+
+# Normally responses which come from /etc/hosts and the DHCP lease
+# file have Time-To-Live set as zero, which conventionally means
+# do not cache further. If you are happy to trade lower load on the
+# server for potentially stale date, you can set a time-to-live (in
+# seconds) here.
+#
+# Set this to 5s while the network has not yet been configured. This
+# enforces a new lookup frequently so after a connection to the internet
+# we will not continue to resolve to the captive portal.
+local-ttl=5
+
+# Force all lookups to point to the captive portal.
+address=/#/34.120.255.244
+
+# Look up critical services normally.
+server=/wifi-update.starlink.com/#
+
+
+================================================================================
+FILE: openwrt/package/base-files/files/etc/crontabs/root
+================================================================================
+
+* * * * * /etc/init.d/wifi_control start
+
+
+================================================================================
+FILE: openwrt/package/base-files/files/etc/hotplug.d/net/00-sysctl
+================================================================================
+
+#!/bin/sh
+
+if [ "$ACTION" = add ]; then
+    for CONF in /etc/sysctl.conf /etc/sysctl.d/*.conf; do
+        [ ! -f "$CONF" ] && continue;
+        sed -ne "/^[[:space:]]*net\..*\.$DEVICENAME\./p" "$CONF" | \
+            sysctl -e -p - | logger -t sysctl
+    done
+
+    [ -f /sbin/smp.sh ] && /sbin/smp.sh
+fi
+
+
+================================================================================
+FILE: openwrt/package/base-files/files/etc/uci-defaults/12_network-generate-ula
+================================================================================
+
+#!/bin/sh
+
+[ "$(uci -q get network.globals.ula_prefix)" != "auto" ] && exit 0
+
+r1=$(dd if=/dev/urandom bs=1 count=1 |hexdump -e '1/1 "%02x"')
+r2=$(dd if=/dev/urandom bs=2 count=1 |hexdump -e '2/1 "%02x"')
+r3=$(dd if=/dev/urandom bs=2 count=1 |hexdump -e '2/1 "%02x"')
+
+uci -q batch <<-EOF >/dev/null
+    set network.globals.ula_prefix=fd$r1:$r2:$r3::/48
+    commit network
+EOF
+
+exit 0
+
+
+================================================================================
+FILE: openwrt/package/base-files/files/bin/config_generate (IPv6 relevant excerpt)
+================================================================================
+
+NOTE: The default ip6assign in config_generate is '60'. This is correct for
+the official Starlink router which IS the Starlink firmware and manages prefix
+assignment internally. On an OpenWrt bypass router receiving a /56 via
+DHCPv6-PD, ip6assign='64' is correct (delegates /56 → /64 directly to LAN).
+
+  uci set network.$1.ip6assign='60'   # official firmware — internal use only
+
+WAN DHCPv6 interface generated as:
+
+  uci set network.${1}6=interface
+  uci set network.${1}6.ifname='$ifname'
+  uci set network.${1}6.proto='dhcpv6'
+
+ULA prefix set to 'auto' (randomly generated on first boot):
+
+  uci set network.globals.ula_prefix='auto'
+
+
+================================================================================
+FILE: openwrt/package/luci/modules/luci-base/root/etc/config/luci
+================================================================================
+
+config core main
+    option lang auto
+    option mediaurlbase /luci-static/bootstrap
+    option resourcebase /luci-static/resources
+
+config extern flash_keep
+    option uci         "/etc/config/"
+    option dropbear    "/etc/dropbear/"
+    option openvpn     "/etc/openvpn/"
+    option passwd      "/etc/passwd"
+    option opkg        "/etc/opkg.conf"
+    option firewall    "/etc/firewall.user"
+    option uploads     "/lib/uci/upload/"
+
+config internal languages
+
+config internal sauth
+    option sessionpath "/tmp/luci-sessions"
+    option sessiontime 3600
+
+config internal ccache
+    option enable 1
+
+config internal themes
+
+
+================================================================================
+FILE: openwrt/package/luci/applications/luci-app-statistics/root/etc/config/luci_statistics
+================================================================================
+
+# general settings
+
+config statistics 'collectd'
+    option BaseDir '/var/run/collectd'
+    option Include '/etc/collectd/conf.d'
+    option PIDFile '/var/run/collectd.pid'
+    option PluginDir '/usr/lib/collectd'
+    option TypesDB '/usr/share/collectd/types.db'
+    option Interval '30'
+    option ReadThreads '2'
+
+config statistics 'rrdtool'
+    option default_timespan '1hour'
+    option image_width '600'
+    option image_path '/tmp/rrdimg'
+
+# output plugins
+
+config statistics 'collectd_rrdtool'
+    option enable '1'
+    option DataDir '/tmp/rrd'
+    option RRARows '100'
+    option RRASingle '1'
+    option RRATimespans '1hour 1day 1week 1month 1year'
+
+config statistics 'collectd_csv'
+    option enable '0'
+
+config statistics 'collectd_logfile'
+    option enable '0'
+    option LogLevel 'notice'
+    option File '/var/log/collectd.log'
+    option Timestamp '1'
+
+config statistics 'collectd_network'
+    option enable '0'
+
+# input plugins
+
+config statistics 'collectd_cpu'
+    option enable '1'
+
+config statistics 'collectd_interface'
+    option enable '1'
+    option Interfaces 'br-lan'
+    option IgnoreSelected '0'
+
+config statistics 'collectd_iwinfo'
+    option enable '1'
+
+config statistics 'collectd_load'
+    option enable '1'
+
+config statistics 'collectd_memory'
+    option enable '1'
+
+config statistics 'collectd_ping'
+    option enable '0'
+    option TTL '127'
+    option Interval '30'
+    option Hosts '127.0.0.1'
+
+# (all other plugins disabled by default)
+
+
+================================================================================
+FILE: openwrt/package/base-files/files/etc/init.d/wifi_control
+================================================================================
+
+#!/bin/sh /etc/rc.common
+# Main WiFi router control process (SpaceX proprietary binary).
+
+START=50
+
+NAME="wifi_control"
+DEFAULT_BIN="/usr/sbin/wifi_control"
+BIN="${BIN:-$DEFAULT_BIN}"
+
+start() {
+    if [ ! -f "/tmp/enable_bypass_mode" ]; then
+        pgrep -x $BIN >/dev/null || $BIN $ARGS 2>&1 | logger -s -t $NAME -p info &
+    fi
+}
+
+stop() {
+    kill $(pgrep -x $BIN)
+}
+
+
+================================================================================
+BUILD CONFIG: openwrt/spacex-mtk-openwrt.config (relevant packages only)
+================================================================================
+
+Target:   mediatek/mt7629
+Kernel:   Linux 4.4
+
+Packages compiled in (selected):
+  CONFIG_PACKAGE_dnsmasq=y
+  CONFIG_PACKAGE_netifd=y
+  CONFIG_PACKAGE_odhcp6c=y
+  CONFIG_PACKAGE_odhcpd=y
+  CONFIG_PACKAGE_ip6tables=y
+  CONFIG_PACKAGE_iptables=y
+  CONFIG_PACKAGE_kmod-ip6tables=y
+  CONFIG_PACKAGE_kmod-ipt-conntrack=y
+  CONFIG_PACKAGE_kmod-ipt-core=y
+  CONFIG_PACKAGE_kmod-ipt-nat=y
+  CONFIG_PACKAGE_kmod-iptunnel4=y
+  CONFIG_PACKAGE_kmod-iptunnel6=y
+  CONFIG_PACKAGE_kmod-nf-conntrack6=y
+  CONFIG_PACKAGE_kmod-nf-conntrack=y
+  CONFIG_PACKAGE_kmod-nf-ipt6=y
+  CONFIG_PACKAGE_kmod-nf-ipt=y
+  CONFIG_PACKAGE_kmod-nf-nat=y
+  CONFIG_PACKAGE_luci-app-mtk=y        # MediaTek WiFi management (internal)
+  CONFIG_PACKAGE_luci-base=y
+  CONFIG_PACKAGE_luci-lib-ip=y
+  CONFIG_PACKAGE_luci-lib-jsonc=y
+  CONFIG_PACKAGE_luci-lib-nixio=y
+  CONFIG_PACKAGE_mapd=y                # MAP-E/T daemon
+
+NOT included:
+  - luci-mod-admin-full (no user-facing LuCI — replaced by wifi_control)
+  - kmod-tcp-bbr / any non-default congestion control
+  - nftables / fw4 (uses iptables on kernel 4.4)
+  - luci-theme-* (no theme selection)
+
+
+================================================================================
+IPv6 KERNEL CONFIG (from spacex-mtk-openwrt.config)
+================================================================================
+
+  CONFIG_KERNEL_IPV6=y
+  CONFIG_KERNEL_IPV6_MULTIPLE_TABLES=y   # policy routing
+  CONFIG_KERNEL_IPV6_SUBTREES=y          # source-based routing
+  CONFIG_KERNEL_IPV6_MROUTE=y            # multicast routing
+  CONFIG_PACKAGE_kmod-ip6tables=y
+  CONFIG_PACKAGE_kmod-nf-ipt6=y
+
+IPv6 transition packages shipped:
+  6in4, 6rd, 6to4, ds-lite, map (MAP-E/T), odhcp6c, thc-ipv6
+
+
+================================================================================
+LIVE NETWORK OBSERVED (AU, gen3 dish with gen2 config reference)
+================================================================================
+
+Starlink delegates:  2406:2d40:8aae::/56  (SpaceX AU block: 2406:2d40::/32)
+LAN subnet:          2406:2d40:8aae:1000::/64
+ULA prefix:          fd98:78e9:79a3::/48  (auto-generated on first boot)
+SLAAC:               enabled (M=0, O=1)
+Assignment model:    /56 → /64 (direct, no intermediary)
+
+DHCPv6 prefix lifetimes sent by Starlink dish:
+  valid_lft:     ~279s
+  preferred_lft: ~129s
+  Fix:           odhcpd max_preferred_lifetime=3600, max_valid_lifetime=7200
+
+
+================================================================================
+KEY DIFFERENCES: GEN2 OFFICIAL FIRMWARE vs OPENWRT BYPASS ROUTER
+================================================================================
+
+  ip6assign:
+    Gen2 official:  '60'  (internal firmware, manages prefix assignment itself)
+    OpenWrt bypass: '64'  (receives /56 via DHCPv6-PD, delegates /64 to LAN)
+
+  congestion control:
+    Gen2 official:  cubic (default, no BBR/hybla/CDG in kernel config)
+    OpenWrt bypass: hybla (satellite-optimised RTT normalisation)
+
+  conntrack timeouts:
+    Gen2 official:  established=7440, udp=60, udp_stream=180
+    OpenWrt bypass: same (aligned to Gen2 values this session)
+
+  firewall:
+    Gen2 official:  iptables (kernel 4.4)
+    OpenWrt bypass: nftables/fw4 (kernel 6.12)
+
+  user interface:
+    Gen2 official:  wifi_control (SpaceX proprietary Go binary, not LuCI)
+    OpenWrt bypass: LuCI
