@@ -281,3 +281,10 @@ Official themes only: `luci-theme-bootstrap` (default), `luci-theme-material`.
 - Confirmed tested: OpenWrt 25.12.0
 - Applicable to:    OpenWrt 23.05+ with fw4 and odhcpd
 - ISP:              Starlink residential (CGNAT, DHCPv6-PD /56)
+
+---
+
+## Project Conventions
+
+- **README files** — always include a "Buy me a beer" section linking to `https://paypal.me/bergfirmware` before the License section.
+- **Git commits** — do NOT add `Co-Authored-By: Claude` or any Claude attribution to commit messages.
