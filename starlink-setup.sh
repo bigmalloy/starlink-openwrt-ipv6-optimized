@@ -108,7 +108,10 @@ echo "[6/6] Applying kernel optimisation (CDG, fq_codel, conntrack)..."
 
 # Install packages (try apk first for OpenWrt 25.x, fall back to opkg)
 if command -v apk >/dev/null 2>&1; then
-    echo "      Installing packages (tc-full, curl)..."
+    echo "      Installing packages (kmod-tcp-hybla, tc-full, curl)..."
+    apk add kmod-tcp-hybla >/dev/null 2>&1 \
+        && echo "      kmod-tcp-hybla installed (apk)." \
+        || echo "      WARNING: kmod-tcp-hybla install failed."
     apk add tc-full >/dev/null 2>&1 \
         && echo "      tc-full installed (apk)." \
         || echo "      WARNING: tc-full install failed."
@@ -117,7 +120,10 @@ if command -v apk >/dev/null 2>&1; then
         || echo "      WARNING: curl install failed."
 else
     opkg update >/dev/null 2>&1
-    echo "      Installing packages (tc, curl)..."
+    echo "      Installing packages (kmod-tcp-hybla, tc, curl)..."
+    opkg install kmod-tcp-hybla >/dev/null 2>&1 \
+        && echo "      kmod-tcp-hybla installed (opkg)." \
+        || echo "      WARNING: kmod-tcp-hybla install failed."
     opkg install tc >/dev/null 2>&1 \
         && echo "      tc installed (opkg)." \
         || true
@@ -139,13 +145,21 @@ if grep -q "# --- starlink-setup ---" /etc/sysctl.conf 2>/dev/null; then
     sed -i '/# --- starlink-setup ---/,$d' /etc/sysctl.conf
 fi
 
-# Pick best available congestion control: CDG > BBR > cubic
-if grep -q '\bcdg\b' /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
+# Pick best available congestion control: hybla > cdg > bbr > cubic
+# hybla: designed for satellite/high-latency links — compensates for RTT bias in
+#        loss-based algorithms; install kmod-tcp-hybla (25.x) or opkg install kmod-tcp-hybla
+# cdg:   delay-gradient; built-in on some kernels, not available on all OpenWrt targets
+# bbr:   bandwidth+RTT based; available as kmod-tcp-bbr
+AVAIL=$(cat /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null)
+if echo "$AVAIL" | grep -qw hybla; then
+    CC=hybla
+    echo "      Congestion control: hybla (satellite-optimised, RTT-compensating)."
+elif echo "$AVAIL" | grep -qw cdg; then
     CC=cdg
-    echo "      Congestion control: CDG (delay-gradient, built-in)."
-elif grep -q '\bbbr\b' /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
+    echo "      Congestion control: CDG (delay-gradient)."
+elif echo "$AVAIL" | grep -qw bbr; then
     CC=bbr
-    echo "      Congestion control: BBR (CDG not available in this kernel build)."
+    echo "      Congestion control: BBR (hybla/CDG not available in this kernel build)."
 else
     CC=cubic
     echo "      Congestion control: cubic (fallback)."
@@ -154,8 +168,8 @@ fi
 cat >> /etc/sysctl.conf << EOF
 
 # --- starlink-setup ---
-# Congestion control: CDG preferred (delay-gradient, fair to other flows).
-# Falls back to BBR if CDG is not compiled into this kernel build.
+# Congestion control: hybla preferred (satellite-optimised, RTT-compensating).
+# Falls back to CDG, then BBR, depending on what this kernel build provides.
 net.core.default_qdisc = fq_codel
 net.ipv4.tcp_congestion_control = $CC
 net.ipv4.tcp_fastopen = 3
