@@ -50,7 +50,7 @@ uci set network.wan6.proto='dhcpv6'
 uci set network.wan6.reqaddress='try'
 uci set network.wan6.reqprefix='auto'
 uci set network.wan6.peerdns='0'
-uci set network.lan.ip6assign='60'
+uci set network.lan.ip6assign='64'
 uci commit network
 echo "      Done."
 
@@ -66,8 +66,11 @@ uci set dhcp.lan.ra_default='1'
 uci set dhcp.lan.ra_lifetime='600'
 uci set dhcp.lan.ra_maxinterval='60'
 uci set dhcp.lan.ra_mininterval='30'
-uci set dhcp.lan.preferred_lft='3600'
-uci set dhcp.lan.valid_lft='7200'
+uci set dhcp.lan.max_preferred_lifetime='3600'
+uci set dhcp.lan.max_valid_lifetime='7200'
+# Remove old (incorrect) option names from previous runs
+uci -q delete dhcp.lan.preferred_lft || true
+uci -q delete dhcp.lan.valid_lft || true
 uci commit dhcp
 echo "      Done."
 fi
@@ -101,14 +104,11 @@ uci commit firewall
 echo "      mtu_fix enabled. fw4 will generate both ingress and egress clamp rules."
 
 # --- 6. Kernel optimisation ---
-echo "[6/6] Applying kernel optimisation (BBR, fq_codel, conntrack)..."
+echo "[6/6] Applying kernel optimisation (CDG, fq_codel, conntrack)..."
 
 # Install packages (try apk first for OpenWrt 25.x, fall back to opkg)
 if command -v apk >/dev/null 2>&1; then
-    echo "      Installing packages (kmod-tcp-bbr, tc-full, curl)..."
-    apk add kmod-tcp-bbr >/dev/null 2>&1 \
-        && echo "      kmod-tcp-bbr installed (apk)." \
-        || echo "      WARNING: kmod-tcp-bbr install failed. Run 'apk add kmod-tcp-bbr' manually."
+    echo "      Installing packages (tc-full, curl)..."
     apk add tc-full >/dev/null 2>&1 \
         && echo "      tc-full installed (apk)." \
         || echo "      WARNING: tc-full install failed."
@@ -117,10 +117,7 @@ if command -v apk >/dev/null 2>&1; then
         || echo "      WARNING: curl install failed."
 else
     opkg update >/dev/null 2>&1
-    echo "      Installing packages (kmod-tcp-bbr, tc, curl)..."
-    opkg install kmod-tcp-bbr >/dev/null 2>&1 \
-        && echo "      kmod-tcp-bbr installed (opkg)." \
-        || echo "      WARNING: kmod-tcp-bbr install failed. Run 'opkg install kmod-tcp-bbr' manually."
+    echo "      Installing packages (tc, curl)..."
     opkg install tc >/dev/null 2>&1 \
         && echo "      tc installed (opkg)." \
         || true
@@ -145,28 +142,35 @@ fi
 cat >> /etc/sysctl.conf << 'EOF'
 
 # --- starlink-setup ---
-# TCP optimisation (BBR affects router-terminated TCP flows only, e.g. OpenVPN in TCP mode)
+# CDG: delay-gradient congestion control — built into the kernel, no extra package needed.
+# Better than BBRv1 for router-terminated flows (WireGuard, local proxy): uses delay
+# signals rather than bandwidth probing, so it is fair to other flows on shared links.
 net.core.default_qdisc = fq_codel
-net.ipv4.tcp_congestion_control = bbr
+net.ipv4.tcp_congestion_control = cdg
 net.ipv4.tcp_fastopen = 3
 net.ipv4.tcp_mtu_probing = 2
 
 # IPv6 — required for Starlink router mode
+# accept_ra=2: Linux ignores RAs when forwarding=1; =2 overrides this so we
+# receive the upstream default route from Starlink via RA (not needed on the
+# official Starlink firmware which manages IPv6 internally, but required here).
 net.ipv6.conf.all.accept_ra = 2
 net.ipv6.conf.default.accept_ra = 2
 net.ipv6.conf.all.forwarding = 1
+net.ipv6.conf.default.forwarding = 1
 
-# Conntrack
+# Conntrack — timeouts from official Starlink firmware sysctl.conf
+# tcp_timeout_established=7440 (2h) avoids dropping long-lived NAT sessions
 net.netfilter.nf_conntrack_max = 65536
-net.netfilter.nf_conntrack_tcp_timeout_established = 1800
+net.netfilter.nf_conntrack_tcp_timeout_established = 7440
 net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 60
 net.netfilter.nf_conntrack_tcp_timeout_syn_recv = 60
 net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 120
 net.netfilter.nf_conntrack_tcp_timeout_time_wait = 120
 net.netfilter.nf_conntrack_tcp_timeout_close_wait = 60
 net.netfilter.nf_conntrack_tcp_timeout_last_ack = 30
-net.netfilter.nf_conntrack_udp_timeout = 30
-net.netfilter.nf_conntrack_udp_timeout_stream = 120
+net.netfilter.nf_conntrack_udp_timeout = 60
+net.netfilter.nf_conntrack_udp_timeout_stream = 180
 net.netfilter.nf_conntrack_icmp_timeout = 30
 net.netfilter.nf_conntrack_generic_timeout = 600
 EOF
@@ -250,8 +254,8 @@ nft list chain inet fw4 mangle_forward 2>/dev/null | grep "maxseg" \
 
 echo ""
 echo "--- odhcpd prefix lifetimes ---"
-echo "  preferred_lft : $(uci get dhcp.lan.preferred_lft 2>/dev/null || echo '(not configured)')"
-echo "  valid_lft     : $(uci get dhcp.lan.valid_lft 2>/dev/null || echo '(not configured)')"
+echo "  max_preferred_lifetime : $(uci get dhcp.lan.max_preferred_lifetime 2>/dev/null || echo '(not configured)')"
+echo "  max_valid_lifetime     : $(uci get dhcp.lan.max_valid_lifetime 2>/dev/null || echo '(not configured)')"
 
 echo ""
 echo "================================================"

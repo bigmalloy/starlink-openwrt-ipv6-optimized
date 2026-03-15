@@ -6,12 +6,12 @@ Tested on **GL-iNet Beryl AX (MT3000)** running **OpenWrt 25.12.0**.
 
 ## What it does
 
-1. **IPv6 WAN** — creates/updates `wan6` interface with DHCPv6-PD
-2. **odhcpd** — overrides Starlink's short prefix lifetimes (prevents constant address churn on LAN clients)
+1. **IPv6 WAN** — creates/updates `wan6` interface with DHCPv6-PD, `ip6assign=64`
+2. **odhcpd** — overrides Starlink's short prefix lifetimes via `max_preferred_lifetime`/`max_valid_lifetime` (prevents constant address churn on LAN clients)
 3. **DNS** — disables peerdns, sets Cloudflare + Google resolvers
 4. **Flow offloading** — enables software offloading, disables hardware offloading (required for fq_codel to work)
 5. **MSS clamping** — sets `mtu_fix 1`; fw4 generates both ingress and egress clamp rules on OpenWrt 24.10+
-6. **Kernel** — installs `kmod-tcp-bbr`, applies sysctl block (BBR, fq_codel, conntrack tuning)
+6. **Kernel** — applies sysctl block (CDG congestion control, fq_codel, conntrack tuning)
 
 The script is idempotent — safe to re-run on an existing install.
 
@@ -43,6 +43,8 @@ Full IPv6 test: https://test-ipv6.roedu.net/
 
 **MSS clamping** uses `mtu_fix 1` via uci. The fw4 egress MSS bug (openwrt/openwrt#12112) is fixed in OpenWrt 24.10+ — both ingress and egress clamp rules are generated automatically.
 
-**BBR** only affects TCP sessions terminating at the router (e.g. WireGuard, OpenVPN). It has no effect on flows from LAN clients passing through NAT.
+**CDG congestion control** — the script sets `net.ipv4.tcp_congestion_control = cdg`. CDG (CAIA Delay-Gradient) uses delay signals rather than packet loss, making it well-suited to satellite links where loss is unrelated to congestion. Unlike BBRv1 it does not aggressively probe for bandwidth, so it is fair to other flows. No extra package required — CDG is built into the kernel. Note: this only affects TCP sessions terminating at the router (WireGuard, a local proxy, etc.) — not LAN client traffic through NAT.
 
 **Prefix lifetimes vs prefix changes** — Starlink sends very short DHCPv6-PD lifetimes (~279s valid, ~129s preferred). The odhcpd fix overrides the *advertised* lifetimes so LAN clients get stable addresses (3600s preferred, 7200s valid) while the router renews the prefix internally on Starlink's schedule. This fixes the common case of address churn from frequent renewals. It does *not* prevent address changes if Starlink genuinely assigns a new prefix (e.g. after a dish reboot or beam handoff) — in that case LAN clients will renumber regardless.
+
+**odhcpd option names** — the correct UCI options are `max_preferred_lifetime` and `max_valid_lifetime`. The similar-looking `preferred_lft` and `valid_lft` are not valid odhcpd options and are silently ignored. The script cleans these up automatically if present from a previous run.
