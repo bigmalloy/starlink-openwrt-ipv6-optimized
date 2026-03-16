@@ -36,7 +36,7 @@ fi
 echo ""
 
 # --- 1. IPv6 WAN ---
-echo "[1/6] Configuring IPv6 WAN (DHCPv6-PD)..."
+echo "[1/7] Configuring IPv6 WAN (DHCPv6-PD)..."
 
 if uci show network.wan6 >/dev/null 2>&1; then
     echo "      wan6 interface exists, updating..."
@@ -55,7 +55,7 @@ uci commit network
 echo "      Done."
 
 # --- 2. odhcpd — fix Starlink short prefix lifetimes ---
-echo "[2/6] Configuring odhcpd (Starlink prefix lifetime fix)..."
+echo "[2/7] Configuring odhcpd (Starlink prefix lifetime fix)..."
 if ! command -v odhcpd >/dev/null 2>&1; then
     echo "      WARNING: odhcpd not found. RA/DHCPv6 config skipped."
     echo "               Install odhcpd-ipv6only and re-run for IPv6 prefix delegation."
@@ -76,7 +76,7 @@ echo "      Done."
 fi
 
 # --- 3. DNS ---
-echo "[3/6] Configuring DNS..."
+echo "[3/7] Configuring DNS..."
 uci set network.wan.peerdns='0'
 uci set network.wan.dns='1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4'
 uci set network.wan6.peerdns='0'
@@ -84,8 +84,20 @@ uci set network.wan6.dns='2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:48
 uci commit network
 echo "      Done."
 
-# --- 4. Flow offloading ---
-echo "[4/6] Enabling software flow offloading (disabling hardware offloading)..."
+# --- 4. NTP ---
+# Starlink dish serves GPS-disciplined NTP (Stratum 1, ~85-123µs accuracy) at 192.168.100.1:123.
+# Available since mid-2024. Add as a source alongside the default pool servers.
+echo "[4/7] Configuring NTP (Starlink dish GPS clock, Stratum 1)..."
+if ! uci get system.ntp.server 2>/dev/null | grep -q '192.168.100.1'; then
+    uci add_list system.ntp.server='192.168.100.1'
+    uci commit system
+    echo "      Dish NTP source added (192.168.100.1)."
+else
+    echo "      Dish NTP source already configured."
+fi
+
+# --- 5. Flow offloading ---
+echo "[5/7] Enabling software flow offloading (disabling hardware offloading)..."
 uci set firewall.@defaults[0].flow_offloading='1'
 uci set firewall.@defaults[0].flow_offloading_hw='0'
 uci commit firewall
@@ -98,13 +110,13 @@ echo "      Done."
 # NOTE: drop-in files with a top-level 'table' block are broken on 25.12 — fw4
 # renders its ruleset as a single inline script, causing a syntax conflict.
 # mtu_fix=1 is the correct fix for OpenWrt 24.10 / 25.12.
-echo "[5/6] Applying MSS clamping (mtu_fix)..."
+echo "[6/7] Applying MSS clamping (mtu_fix)..."
 uci set firewall.@defaults[0].mtu_fix='1'
 uci commit firewall
 echo "      mtu_fix enabled. fw4 will generate both ingress and egress clamp rules."
 
 # --- 6. Kernel optimisation ---
-echo "[6/6] Applying kernel optimisation (hybla, fq_codel, conntrack)..."
+echo "[7/7] Applying kernel optimisation (hybla, fq_codel, conntrack)..."
 
 # Install packages (try apk first for OpenWrt 25.x, fall back to opkg)
 if command -v apk >/dev/null 2>&1; then
@@ -210,6 +222,7 @@ service network restart   >/dev/null 2>&1 && echo "  network     OK" || echo "  
 service odhcpd restart    >/dev/null 2>&1 && echo "  odhcpd      OK" || echo "  odhcpd      FAILED"
 service dnsmasq restart   >/dev/null 2>&1 && echo "  dnsmasq     OK" || echo "  dnsmasq     FAILED"
 service firewall restart  >/dev/null 2>&1 && echo "  firewall    OK" || echo "  firewall    FAILED"
+service sysntpd restart   >/dev/null 2>&1 && echo "  sysntpd     OK" || echo "  sysntpd     FAILED"
 
 # Give DHCPv6-PD time to complete before verifying
 echo ""
@@ -281,6 +294,10 @@ echo ""
 echo "--- odhcpd prefix lifetimes ---"
 echo "  max_preferred_lifetime : $(uci get dhcp.lan.max_preferred_lifetime 2>/dev/null || echo '(not configured)')"
 echo "  max_valid_lifetime     : $(uci get dhcp.lan.max_valid_lifetime 2>/dev/null || echo '(not configured)')"
+
+echo ""
+echo "--- NTP sources ---"
+uci get system.ntp.server 2>/dev/null | tr ' ' '\n' | sed 's/^/  /' || echo "  (not configured)"
 
 echo ""
 echo "================================================"
