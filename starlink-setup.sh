@@ -6,12 +6,32 @@
 # Usage:
 #   scp -O starlink-setup.sh root@192.168.1.1:/tmp/
 #   ssh root@192.168.1.1 "sh /tmp/starlink-setup.sh"
+#
+# OpenWrt UCI settings (IPv6, odhcpd, DNS, firewall) are only applied on the
+# first run. On subsequent runs those sections are skipped so any changes you
+# make via LuCI or uci are preserved. To re-apply from scratch, delete the
+# sentinel file and re-run:
+#   rm /etc/starlink-setup-done && sh /tmp/starlink-setup.sh
 
 set -e
+
+SENTINEL=/etc/starlink-setup-done
 
 echo "================================================"
 echo " Starlink OpenWrt Setup Script"
 echo "================================================"
+echo ""
+
+if [ -f "$SENTINEL" ]; then
+    FIRST_RUN=0
+    echo "NOTE: Sentinel found ($SENTINEL)."
+    echo "      OpenWrt UCI settings will be skipped — preserving your config."
+    echo "      Packages, sysctl, and NTP will still be checked/updated."
+    echo "      To re-apply all settings: rm $SENTINEL && sh /tmp/starlink-setup.sh"
+else
+    FIRST_RUN=1
+fi
+
 echo ""
 
 # --- Detect WAN device ---
@@ -36,57 +56,70 @@ fi
 echo ""
 
 # --- 1. IPv6 WAN ---
-echo "[1/7] Configuring IPv6 WAN (DHCPv6-PD)..."
+if [ "$FIRST_RUN" = "1" ]; then
+    echo "[1/7] Configuring IPv6 WAN (DHCPv6-PD)..."
 
-if uci show network.wan6 >/dev/null 2>&1; then
-    echo "      wan6 interface exists, updating..."
+    if uci show network.wan6 >/dev/null 2>&1; then
+        echo "      wan6 interface exists, updating..."
+    else
+        echo "      Creating wan6 interface..."
+        uci set network.wan6=interface
+        uci set network.wan6.device='@wan'
+    fi
+
+    uci set network.wan6.proto='dhcpv6'
+    uci set network.wan6.reqaddress='try'
+    uci set network.wan6.reqprefix='auto'
+    uci set network.wan6.peerdns='0'
+    uci set network.lan.ip6assign='64'
+    uci commit network
+    echo "      Done."
 else
-    echo "      Creating wan6 interface..."
-    uci set network.wan6=interface
-    uci set network.wan6.device='@wan'
+    echo "[1/7] IPv6 WAN — skipping (already configured)."
 fi
 
-uci set network.wan6.proto='dhcpv6'
-uci set network.wan6.reqaddress='try'
-uci set network.wan6.reqprefix='auto'
-uci set network.wan6.peerdns='0'
-uci set network.lan.ip6assign='64'
-uci commit network
-echo "      Done."
-
 # --- 2. odhcpd — fix Starlink short prefix lifetimes ---
-echo "[2/7] Configuring odhcpd (Starlink prefix lifetime fix)..."
-if ! command -v odhcpd >/dev/null 2>&1; then
-    echo "      WARNING: odhcpd not found. RA/DHCPv6 config skipped."
-    echo "               Install odhcpd-ipv6only and re-run for IPv6 prefix delegation."
+if [ "$FIRST_RUN" = "1" ]; then
+    echo "[2/7] Configuring odhcpd (Starlink prefix lifetime fix)..."
+    if ! command -v odhcpd >/dev/null 2>&1; then
+        echo "      WARNING: odhcpd not found. RA/DHCPv6 config skipped."
+        echo "               Install odhcpd-ipv6only and re-run for IPv6 prefix delegation."
+    else
+        uci set dhcp.lan.ra='server'
+        uci set dhcp.lan.dhcpv6='server'
+        uci set dhcp.lan.ra_default='1'
+        uci set dhcp.lan.ra_lifetime='600'
+        uci set dhcp.lan.ra_maxinterval='60'
+        uci set dhcp.lan.ra_mininterval='30'
+        uci set dhcp.lan.max_preferred_lifetime='3600'
+        uci set dhcp.lan.max_valid_lifetime='7200'
+        # Remove old (incorrect) option names from previous runs
+        uci -q delete dhcp.lan.preferred_lft || true
+        uci -q delete dhcp.lan.valid_lft || true
+        uci commit dhcp
+        echo "      Done."
+    fi
 else
-uci set dhcp.lan.ra='server'
-uci set dhcp.lan.dhcpv6='server'
-uci set dhcp.lan.ra_default='1'
-uci set dhcp.lan.ra_lifetime='600'
-uci set dhcp.lan.ra_maxinterval='60'
-uci set dhcp.lan.ra_mininterval='30'
-uci set dhcp.lan.max_preferred_lifetime='3600'
-uci set dhcp.lan.max_valid_lifetime='7200'
-# Remove old (incorrect) option names from previous runs
-uci -q delete dhcp.lan.preferred_lft || true
-uci -q delete dhcp.lan.valid_lft || true
-uci commit dhcp
-echo "      Done."
+    echo "[2/7] odhcpd — skipping (already configured)."
 fi
 
 # --- 3. DNS ---
-echo "[3/7] Configuring DNS..."
-uci set network.wan.peerdns='0'
-uci set network.wan.dns='1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4'
-uci set network.wan6.peerdns='0'
-uci set network.wan6.dns='2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844'
-uci commit network
-echo "      Done."
+if [ "$FIRST_RUN" = "1" ]; then
+    echo "[3/7] Configuring DNS..."
+    uci set network.wan.peerdns='0'
+    uci set network.wan.dns='1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4'
+    uci set network.wan6.peerdns='0'
+    uci set network.wan6.dns='2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844'
+    uci commit network
+    echo "      Done."
+else
+    echo "[3/7] DNS — skipping (already configured)."
+fi
 
 # --- 4. NTP ---
 # Starlink dish serves GPS-disciplined NTP (Stratum 1, ~85-123µs accuracy) at 192.168.100.1:123.
 # Available since mid-2024. Add as a source alongside the default pool servers.
+# Always checked — idempotent, safe to run on every invocation.
 echo "[4/7] Configuring NTP (Starlink dish GPS clock, Stratum 1)..."
 if ! uci get system.ntp.server 2>/dev/null | grep -q '192.168.100.1'; then
     uci add_list system.ntp.server='192.168.100.1'
@@ -97,25 +130,34 @@ else
 fi
 
 # --- 5. Flow offloading ---
-echo "[5/7] Enabling software flow offloading (disabling hardware offloading)..."
-uci set firewall.@defaults[0].flow_offloading='1'
-uci set firewall.@defaults[0].flow_offloading_hw='0'
-uci commit firewall
-echo "      Done."
+if [ "$FIRST_RUN" = "1" ]; then
+    echo "[5/7] Enabling software flow offloading (disabling hardware offloading)..."
+    uci set firewall.@defaults[0].flow_offloading='1'
+    uci set firewall.@defaults[0].flow_offloading_hw='0'
+    uci commit firewall
+    echo "      Done."
+else
+    echo "[5/7] Flow offloading — skipping (already configured)."
+fi
 
-# --- 5. MSS clamping ---
+# --- 6. MSS clamping ---
 # fw4 bug (openwrt/openwrt#12112): mtu_fix only generated an ingress clamp rule.
 # Fixed in firewall4 commit 698a533 (OpenWrt 24.10+): enabling mtu_fix now
 # generates both ingress (mangle_forward) and egress (mangle_postrouting) rules.
 # NOTE: drop-in files with a top-level 'table' block are broken on 25.12 — fw4
 # renders its ruleset as a single inline script, causing a syntax conflict.
 # mtu_fix=1 is the correct fix for OpenWrt 24.10 / 25.12.
-echo "[6/7] Applying MSS clamping (mtu_fix)..."
-uci set firewall.@defaults[0].mtu_fix='1'
-uci commit firewall
-echo "      mtu_fix enabled. fw4 will generate both ingress and egress clamp rules."
+if [ "$FIRST_RUN" = "1" ]; then
+    echo "[6/7] Applying MSS clamping (mtu_fix)..."
+    uci set firewall.@defaults[0].mtu_fix='1'
+    uci commit firewall
+    echo "      mtu_fix enabled. fw4 will generate both ingress and egress clamp rules."
+else
+    echo "[6/7] MSS clamping — skipping (already configured)."
+fi
 
-# --- 6. Kernel optimisation ---
+# --- 7. Kernel optimisation ---
+# Always runs — package installs are idempotent and sysctl block is replaced in-place.
 echo "[7/7] Applying kernel optimisation (hybla, fq_codel, conntrack)..."
 
 # Install packages (try apk first for OpenWrt 25.x, fall back to opkg)
@@ -214,6 +256,14 @@ EOF
 
 sysctl -p /etc/sysctl.conf >/dev/null 2>&1 || true
 echo "      Done."
+
+# --- Mark first run complete ---
+if [ "$FIRST_RUN" = "1" ]; then
+    touch "$SENTINEL"
+    echo ""
+    echo "NOTE: First-run sentinel written to $SENTINEL."
+    echo "      Re-running this script will skip UCI config sections."
+fi
 
 # --- Restart services ---
 echo ""
