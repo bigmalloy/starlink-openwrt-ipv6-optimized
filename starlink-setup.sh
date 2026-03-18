@@ -80,20 +80,28 @@ fi
 
 # --- 2. odhcpd — fix Starlink short prefix lifetimes ---
 if [ "$FIRST_RUN" = "1" ]; then
-    echo "[2/7] Configuring odhcpd (Starlink prefix lifetime fix)..."
+    echo "[2/7] Configuring odhcpd (RA intervals for Starlink short lifetimes)..."
     if ! command -v odhcpd >/dev/null 2>&1; then
         echo "      WARNING: odhcpd not found. RA/DHCPv6 config skipped."
         echo "               Install odhcpd-ipv6only and re-run for IPv6 prefix delegation."
     else
         uci set dhcp.lan.ra='server'
         uci set dhcp.lan.dhcpv6='server'
-        uci set dhcp.lan.ra_default='1'
-        uci set dhcp.lan.ra_lifetime='600'
+        # Starlink sends ~150s preferred / ~300s valid lifetimes on the delegated
+        # prefix. odhcpd renews the prefix every ~75s, so the prefix itself stays
+        # valid — but LAN clients only learn about renewed lifetimes when they
+        # receive an RA. With the default max RA interval of 600s, the preferred
+        # lifetime advertised to clients can expire before the next RA arrives,
+        # causing clients to stop using the address for new connections.
+        # Setting max interval to 60s keeps clients refreshed well within the
+        # renewal cycle. Min interval follows RFC 4861 at 1/3 of max.
         uci set dhcp.lan.ra_maxinterval='60'
-        uci set dhcp.lan.ra_mininterval='30'
-        uci set dhcp.lan.max_preferred_lifetime='3600'
-        uci set dhcp.lan.max_valid_lifetime='7200'
-        # Remove old (incorrect) option names from previous runs
+        uci set dhcp.lan.ra_mininterval='20'
+        # Remove stale options from previous versions of this script
+        uci -q delete dhcp.lan.ra_default || true
+        uci -q delete dhcp.lan.ra_lifetime || true
+        uci -q delete dhcp.lan.max_preferred_lifetime || true
+        uci -q delete dhcp.lan.max_valid_lifetime || true
         uci -q delete dhcp.lan.preferred_lft || true
         uci -q delete dhcp.lan.valid_lft || true
         uci commit dhcp
@@ -149,9 +157,18 @@ fi
 # mtu_fix=1 is the correct fix for OpenWrt 24.10 / 25.12.
 if [ "$FIRST_RUN" = "1" ]; then
     echo "[6/7] Applying MSS clamping (mtu_fix)..."
-    uci set firewall.@defaults[0].mtu_fix='1'
-    uci commit firewall
-    echo "      mtu_fix enabled. fw4 will generate both ingress and egress clamp rules."
+    # mtu_fix is a zone-level option in fw4, not a defaults option.
+    # On OpenWrt 24.10+ it defaults to 1 on the wan zone, but set it
+    # explicitly in case it has been changed or is missing.
+    WAN_ZONE=$(uci show firewall | grep -m1 "\.name='wan'" | cut -d. -f2)
+    if [ -n "$WAN_ZONE" ]; then
+        uci set firewall.$WAN_ZONE.mtu_fix='1'
+        uci commit firewall
+        echo "      mtu_fix=1 set on firewall zone '$WAN_ZONE'."
+        echo "      fw4 will generate both ingress and egress clamp rules."
+    else
+        echo "      WARNING: wan zone not found in firewall config — mtu_fix not set."
+    fi
 else
     echo "[6/7] MSS clamping — skipping (already configured)."
 fi
@@ -200,14 +217,18 @@ if grep -q "# --- starlink-setup ---" /etc/sysctl.conf 2>/dev/null; then
 fi
 
 # Pick best available congestion control: hybla > cdg > bbr > cubic
-# hybla: designed for satellite/high-latency links — compensates for RTT bias in
-#        loss-based algorithms; install kmod-tcp-hybla (25.x) or opkg install kmod-tcp-hybla
+# hybla: normalises CWND growth against a 25ms reference RTT so loss-based
+#        algorithms aren't penalised on links with elevated RTT. Originally
+#        designed for GEO satellites (~500ms RTT), but may still help on
+#        Starlink (LEO, ~20-50ms) where packet loss is higher than typical
+#        broadband. Only affects router-terminated TCP (e.g. WireGuard, local
+#        proxies), not LAN client traffic passing through NAT.
 # cdg:   delay-gradient; built-in on some kernels, not available on all OpenWrt targets
 # bbr:   bandwidth+RTT based; available as kmod-tcp-bbr
 AVAIL=$(cat /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null)
 if echo "$AVAIL" | grep -qw hybla; then
     CC=hybla
-    echo "      Congestion control: hybla (satellite-optimised, RTT-compensating)."
+    echo "      Congestion control: hybla (RTT-normalising, loss-based)."
 elif echo "$AVAIL" | grep -qw cdg; then
     CC=cdg
     echo "      Congestion control: CDG (delay-gradient)."
@@ -222,7 +243,7 @@ fi
 cat >> /etc/sysctl.conf << EOF
 
 # --- starlink-setup ---
-# Congestion control: hybla preferred (satellite-optimised, RTT-compensating).
+# Congestion control: hybla preferred (RTT-normalising, loss-based).
 # Falls back to CDG, then BBR, depending on what this kernel build provides.
 net.core.default_qdisc = fq_codel
 net.ipv4.tcp_congestion_control = $CC
@@ -301,13 +322,9 @@ else
     echo "  This usually means one of:"
     echo "    1. IPv6 is still coming up — wait 30s and re-run:"
     echo "       ip -6 addr show dev $LAN_BR"
-    echo "    2. Router Solicitation keepalive failure — Starlink requires the router"
-    echo "       to send RS packets roughly every 60s or it stops delegating the /56"
-    echo "       and falls back to a /64. On OpenWrt 25.x, odhcp6c handles this"
-    echo "       natively. Try: service network restart"
-    echo "       On older versions (23.05/24.10): opkg install ndisc6"
-    echo "    3. If you still get only a /64 after fixing the keepalive, NDP proxy"
-    echo "       allows LAN clients to share the WAN /64 (limited, no DHCPv6 on LAN):"
+    echo "    2. DHCPv6-PD not yet complete — try: service network restart"
+    echo "    3. If you get only a /64 (no PD), NDP proxy allows LAN clients"
+    echo "       to share the WAN /64 (limited — no DHCPv6 on LAN):"
     echo "       https://openwrt.org/docs/guide-user/network/ipv6/ipv6.ndp"
 fi
 
@@ -341,9 +358,9 @@ nft list chain inet fw4 mangle_forward 2>/dev/null | grep "maxseg" \
     || echo "  WARNING: Ingress MSS clamp rule not found in mangle_forward."
 
 echo ""
-echo "--- odhcpd prefix lifetimes ---"
-echo "  max_preferred_lifetime : $(uci get dhcp.lan.max_preferred_lifetime 2>/dev/null || echo '(not configured)')"
-echo "  max_valid_lifetime     : $(uci get dhcp.lan.max_valid_lifetime 2>/dev/null || echo '(not configured)')"
+echo "--- RA interval settings ---"
+echo "  ra_maxinterval : $(uci get dhcp.lan.ra_maxinterval 2>/dev/null || echo '(default — should be 60)')"
+echo "  ra_mininterval : $(uci get dhcp.lan.ra_mininterval 2>/dev/null || echo '(default — should be 20)')"
 
 echo ""
 echo "--- NTP sources ---"
