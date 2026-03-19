@@ -276,6 +276,12 @@ net.netfilter.nf_conntrack_generic_timeout = 600
 EOF
 
 sysctl -p /etc/sysctl.conf >/dev/null 2>&1 || true
+# Explicitly set accept_ra=2 on the WAN device for the current session.
+# net.ipv6.conf.all.accept_ra=2 in sysctl.conf should already cover this per
+# kernel docs, but netifd may reset the per-interface value to 0 when it brings
+# the interface up with forwarding enabled. Setting it directly here ensures it
+# takes effect without waiting for a reboot or interface bounce.
+sysctl -w net.ipv6.conf."$WAN_DEV".accept_ra=2 >/dev/null 2>&1 || true
 echo "      Done."
 
 # --- Mark first run complete ---
