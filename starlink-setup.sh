@@ -115,9 +115,17 @@ fi
 if [ "$FIRST_RUN" = "1" ]; then
     echo "[3/7] Configuring DNS..."
     uci set network.wan.peerdns='0'
-    uci set network.wan.dns='1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4'
+    uci -q delete network.wan.dns
+    uci add_list network.wan.dns='1.1.1.1'
+    uci add_list network.wan.dns='1.0.0.1'
+    uci add_list network.wan.dns='8.8.8.8'
+    uci add_list network.wan.dns='8.8.4.4'
     uci set network.wan6.peerdns='0'
-    uci set network.wan6.dns='2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844'
+    uci -q delete network.wan6.dns
+    uci add_list network.wan6.dns='2606:4700:4700::1111'
+    uci add_list network.wan6.dns='2606:4700:4700::1001'
+    uci add_list network.wan6.dns='2001:4860:4860::8888'
+    uci add_list network.wan6.dns='2001:4860:4860::8844'
     uci commit network
     echo "      Done."
 else
@@ -212,8 +220,13 @@ fi
 # Remove any existing starlink-setup block to avoid duplicates on re-run
 if grep -q "# --- starlink-setup ---" /etc/sysctl.conf 2>/dev/null; then
     echo "      Existing starlink-setup block found in sysctl.conf, replacing..."
-    # Remove from marker to end of file then re-append
-    sed -i '/# --- starlink-setup ---/,$d' /etc/sysctl.conf
+    # Remove between markers (inclusive). If closing marker is absent (old install),
+    # fall back to tail-delete to avoid leaving orphaned settings.
+    if grep -q "# --- starlink-setup end ---" /etc/sysctl.conf 2>/dev/null; then
+        sed -i '/# --- starlink-setup ---/,/# --- starlink-setup end ---/d' /etc/sysctl.conf
+    else
+        sed -i '/# --- starlink-setup ---/,$d' /etc/sysctl.conf
+    fi
 fi
 
 # Pick best available congestion control: hybla > cdg > bbr > cubic
@@ -248,7 +261,7 @@ cat >> /etc/sysctl.conf << EOF
 net.core.default_qdisc = fq_codel
 net.ipv4.tcp_congestion_control = $CC
 net.ipv4.tcp_fastopen = 3
-net.ipv4.tcp_mtu_probing = 2
+net.ipv4.tcp_mtu_probing = 1
 
 # IPv6 — required for Starlink router mode
 # accept_ra=2: Linux ignores RAs when forwarding=1; =2 overrides this so we
@@ -273,6 +286,7 @@ net.netfilter.nf_conntrack_udp_timeout = 60
 net.netfilter.nf_conntrack_udp_timeout_stream = 180
 net.netfilter.nf_conntrack_icmp_timeout = 30
 net.netfilter.nf_conntrack_generic_timeout = 600
+# --- starlink-setup end ---
 EOF
 
 sysctl -p /etc/sysctl.conf >/dev/null 2>&1 || true
@@ -282,6 +296,23 @@ sysctl -p /etc/sysctl.conf >/dev/null 2>&1 || true
 # the interface up with forwarding enabled. Setting it directly here ensures it
 # takes effect without waiting for a reboot or interface bounce.
 sysctl -w net.ipv6.conf."$WAN_DEV".accept_ra=2 >/dev/null 2>&1 || true
+
+# Install a hotplug script so accept_ra=2 is re-applied after every reboot
+# and interface reconnect. netifd resets per-interface accept_ra to 0 when it
+# brings up an interface with forwarding enabled; the sysctl.conf all/default
+# values are processed before netifd runs at boot so they get overwritten.
+HOTPLUG_DIR=/etc/hotplug.d/iface
+HOTPLUG_FILE="$HOTPLUG_DIR/25-accept_ra"
+mkdir -p "$HOTPLUG_DIR"
+cat > "$HOTPLUG_FILE" << HOTPLUG
+#!/bin/sh
+# Restore accept_ra=2 on WAN after netifd interface-up.
+# Written by starlink-setup.sh — safe to delete if not using IPv6 on Starlink.
+[ "\$ACTION" = ifup ] && [ "\$INTERFACE" = wan6 ] && \
+    sysctl -w net.ipv6.conf.${WAN_DEV}.accept_ra=2 >/dev/null 2>&1
+HOTPLUG
+chmod +x "$HOTPLUG_FILE"
+echo "      Hotplug script written to $HOTPLUG_FILE (accept_ra=2 on wan6 up)."
 echo "      Done."
 
 # --- Mark first run complete ---
