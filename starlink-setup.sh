@@ -115,13 +115,13 @@ fi
 if [ "$FIRST_RUN" = "1" ]; then
     echo "[3/7] Configuring DNS..."
     uci set network.wan.peerdns='0'
-    uci -q delete network.wan.dns
+    uci -q delete network.wan.dns || true
     uci add_list network.wan.dns='1.1.1.1'
     uci add_list network.wan.dns='1.0.0.1'
     uci add_list network.wan.dns='8.8.8.8'
     uci add_list network.wan.dns='8.8.4.4'
     uci set network.wan6.peerdns='0'
-    uci -q delete network.wan6.dns
+    uci -q delete network.wan6.dns || true
     uci add_list network.wan6.dns='2606:4700:4700::1111'
     uci add_list network.wan6.dns='2606:4700:4700::1001'
     uci add_list network.wan6.dns='2001:4860:4860::8888'
