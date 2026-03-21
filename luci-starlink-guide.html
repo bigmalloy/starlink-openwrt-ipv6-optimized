@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Starlink OpenWrt 25 — Manual LuCI Configuration Guide</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 11pt;
+    line-height: 1.6;
+    color: #1a1a1a;
+    background: #fff;
+  }
+
+  /* ---------- COVER ---------- */
+  .cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding: 72px 64px;
+    background: linear-gradient(145deg, #0f2744 0%, #1a3f6b 55%, #1e5096 100%);
+    color: #fff;
+    page-break-after: always;
+  }
+  .cover-badge {
+    display: inline-block;
+    background: #f0a500;
+    color: #0f2744;
+    font-size: 9pt;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 4px 14px;
+    border-radius: 3px;
+    margin-bottom: 28px;
+  }
+  .cover h1 {
+    font-size: 30pt;
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: -0.5px;
+    margin-bottom: 18px;
+    max-width: 560px;
+  }
+  .cover h1 span { color: #7ec8ff; }
+  .cover .subtitle {
+    font-size: 13pt;
+    color: #a8cce8;
+    margin-bottom: 48px;
+    max-width: 520px;
+    line-height: 1.5;
+  }
+  .cover-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 10pt;
+    color: #6fa8d0;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    padding-top: 28px;
+    width: 100%;
+  }
+  .cover-meta strong { color: #a8cce8; }
+
+  /* ---------- TOC ---------- */
+  .toc-page {
+    padding: 52px 64px;
+    page-break-after: always;
+  }
+  .toc-page h2 {
+    font-size: 16pt;
+    font-weight: 700;
+    color: #0f2744;
+    margin-bottom: 24px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e0e8f0;
+  }
+  .toc-list { list-style: none; }
+  .toc-list li {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 7px 0;
+    border-bottom: 1px dotted #d0dce8;
+    font-size: 11pt;
+  }
+  .toc-list li .num {
+    min-width: 28px;
+    font-weight: 700;
+    color: #1a5096;
+  }
+  .toc-list li .title { flex: 1; }
+  .toc-list li .dots { flex: 1; border-bottom: 1px dotted #b0bec8; margin: 0 8px 4px 8px; }
+  .toc-list li .pg { color: #666; font-size: 10pt; }
+  .toc-section {
+    margin-top: 18px;
+    font-size: 9pt;
+    font-weight: 700;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 4px 0 2px 0;
+  }
+  .toc-note {
+    margin-top: 28px;
+    background: #fff8e6;
+    border-left: 4px solid #f0a500;
+    padding: 14px 16px;
+    border-radius: 0 4px 4px 0;
+    font-size: 10pt;
+    color: #5a4000;
+  }
+
+  /* ---------- CONTENT ---------- */
+  .page {
+    padding: 44px 64px;
+    page-break-after: always;
+  }
+  .page:last-child { page-break-after: auto; }
+
+  /* Section header */
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 22px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #e0e8f0;
+  }
+  .section-num {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    height: 40px;
+    background: #1a5096;
+    color: #fff;
+    font-size: 16pt;
+    font-weight: 800;
+    border-radius: 8px;
+    flex-shrink: 0;
+  }
+  .section-header h2 {
+    font-size: 16pt;
+    font-weight: 700;
+    color: #0f2744;
+    line-height: 1.2;
+  }
+  .section-header .nav-path {
+    font-size: 9pt;
+    color: #888;
+    font-weight: 400;
+    display: block;
+    margin-top: 2px;
+  }
+
+  /* Nav path breadcrumb */
+  .nav-path-block {
+    display: inline-flex;
+    align-items: center;
+    background: #e8f0fa;
+    border: 1px solid #c0d0e8;
+    border-radius: 5px;
+    padding: 5px 12px;
+    font-size: 9.5pt;
+    font-family: "Segoe UI", sans-serif;
+    color: #0f2744;
+    font-weight: 600;
+    margin: 0 0 18px 0;
+    gap: 4px;
+  }
+  .nav-path-block .sep { color: #6090c0; font-weight: 400; margin: 0 2px; }
+
+  /* Steps */
+  .steps { counter-reset: step; list-style: none; margin: 0 0 20px 0; }
+  .steps li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 0 12px;
+    margin-bottom: 12px;
+    align-items: start;
+  }
+  .steps li::before {
+    content: counter(step);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: #1a5096;
+    color: #fff;
+    font-size: 9pt;
+    font-weight: 700;
+    border-radius: 50%;
+    margin-top: 1px;
+    flex-shrink: 0;
+  }
+  .steps li p { margin: 0; }
+
+  /* Field table */
+  .field-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0 20px 0;
+    font-size: 10pt;
+  }
+  .field-table thead tr {
+    background: #0f2744;
+    color: #fff;
+  }
+  .field-table thead th {
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 9.5pt;
+  }
+  .field-table tbody tr:nth-child(even) { background: #f4f7fb; }
+  .field-table tbody td {
+    padding: 7px 12px;
+    border-bottom: 1px solid #e0e8f0;
+    vertical-align: top;
+  }
+  .field-table td:first-child { font-weight: 600; color: #0f2744; white-space: nowrap; }
+  .field-table td code {
+    background: #e8f0fa;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 9.5pt;
+    color: #0d3a7a;
+  }
+
+  /* Callout boxes */
+  .callout {
+    border-radius: 4px;
+    padding: 12px 14px;
+    margin: 16px 0;
+    font-size: 10pt;
+    line-height: 1.55;
+  }
+  .callout strong { display: block; margin-bottom: 4px; font-size: 9.5pt; text-transform: uppercase; letter-spacing: 0.06em; }
+  .callout.note   { background: #e8f4ff; border-left: 4px solid #2196f3; color: #0d3060; }
+  .callout.note strong { color: #1565c0; }
+  .callout.warn   { background: #fff8e1; border-left: 4px solid #f0a500; color: #4a3000; }
+  .callout.warn strong { color: #c57a00; }
+  .callout.tip    { background: #e8f5e9; border-left: 4px solid #43a047; color: #1b4020; }
+  .callout.tip strong { color: #2e7d32; }
+  .callout.danger { background: #fdecea; border-left: 4px solid #e53935; color: #4a0f0a; }
+  .callout.danger strong { color: #b71c1c; }
+
+  /* Inline code / UI labels */
+  code {
+    background: #e8f0fa;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 9.5pt;
+    color: #0d3a7a;
+  }
+  .ui { font-weight: 600; color: #1a3f6b; }
+  kbd {
+    display: inline-block;
+    background: #f0f4f8;
+    border: 1px solid #b0bec8;
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-family: inherit;
+    font-size: 9.5pt;
+    font-weight: 600;
+    color: #1a1a1a;
+    box-shadow: 0 1px 0 #b0bec8;
+  }
+
+  /* Terminal block */
+  .terminal {
+    background: #0f1a2e;
+    color: #a8d8ea;
+    border-radius: 6px;
+    padding: 14px 16px;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 9.5pt;
+    line-height: 1.65;
+    margin: 14px 0;
+    overflow: hidden;
+  }
+  .terminal .prompt { color: #4caf50; }
+  .terminal .comment { color: #556b7a; }
+  .terminal .val { color: #f0a500; }
+
+  /* Sub-heading inside a page */
+  h3 {
+    font-size: 11.5pt;
+    font-weight: 700;
+    color: #0f2744;
+    margin: 20px 0 10px 0;
+  }
+  h3:first-child { margin-top: 0; }
+
+  p { margin: 0 0 10px 0; }
+  ul, ol { margin: 0 0 12px 16px; }
+  li { margin-bottom: 4px; }
+
+  /* Footer */
+  @page {
+    margin: 0;
+    size: A4;
+  }
+
+  /* Screen-only helpers */
+  @media screen {
+    body { max-width: 900px; margin: 0 auto; padding: 0; }
+    .cover { min-height: 0; padding: 60px; }
+    .page, .toc-page { border-bottom: 2px dashed #e0e8f0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ========== COVER ========== -->
+<div class="cover">
+  <div class="cover-badge">OpenWrt 25 · Starlink Residential</div>
+  <h1>Manual LuCI<br>Configuration Guide</h1>
+  <p class="subtitle">
+    Step-by-step LuCI instructions for configuring IPv6 DHCPv6-PD and MSS clamping
+    on a Starlink residential connection — the same settings applied by
+    <strong style="color:#7ec8ff">starlink-setup.sh</strong>.
+  </p>
+  <div class="cover-meta">
+    <div><strong>Target device:</strong> GL-iNet Beryl AX (MT3000) — or any OpenWrt 25.x router</div>
+    <div><strong>Firmware:</strong> OpenWrt 25.12.0 · fw4 (nftables) · LuCI 25.x</div>
+    <div><strong>Connection:</strong> Starlink residential — CGNAT, DHCPv6-PD /56</div>
+    <div style="margin-top:10px"><strong>Date:</strong> March 2026</div>
+  </div>
+</div>
+
+<!-- ========== TOC ========== -->
+<div class="toc-page">
+  <h2>Contents</h2>
+  <div class="toc-section">Overview</div>
+  <ul class="toc-list">
+    <li><span class="num">—</span><span class="title">Before you begin</span><span class="dots"></span><span class="pg">3</span></li>
+  </ul>
+  <div class="toc-section">IPv6 Configuration</div>
+  <ul class="toc-list">
+    <li><span class="num">1</span><span class="title">IPv6 WAN interface (DHCPv6-PD)</span><span class="dots"></span><span class="pg">4</span></li>
+    <li><span class="num">2</span><span class="title">LAN prefix assignment (ip6assign)</span><span class="dots"></span><span class="pg">5</span></li>
+    <li><span class="num">3</span><span class="title">odhcpd — RA intervals for Starlink short lifetimes</span><span class="dots"></span><span class="pg">6</span></li>
+    <li><span class="num">4</span><span class="title">DNS servers (Cloudflare + Google)</span><span class="dots"></span><span class="pg">7</span></li>
+    <li><span class="num">5</span><span class="title">NTP — Starlink dish GPS clock</span><span class="dots"></span><span class="pg">8</span></li>
+  </ul>
+  <div class="toc-section">Firewall</div>
+  <ul class="toc-list">
+    <li><span class="num">6</span><span class="title">Software flow offloading</span><span class="dots"></span><span class="pg">9</span></li>
+    <li><span class="num">7</span><span class="title">MSS clamping (mtu_fix) on the WAN zone</span><span class="dots"></span><span class="pg">10</span></li>
+  </ul>
+  <div class="toc-section">Verification</div>
+  <ul class="toc-list">
+    <li><span class="num">—</span><span class="title">Confirming IPv6 and MSS clamp are working</span><span class="dots"></span><span class="pg">11</span></li>
+  </ul>
+  <div class="toc-section">Appendix</div>
+  <ul class="toc-list">
+    <li><span class="num">A</span><span class="title">Settings that cannot be done in LuCI</span><span class="dots"></span><span class="pg">12</span></li>
+  </ul>
+  <div class="toc-note">
+    <strong>Using the script instead?</strong> If you prefer automation,
+    <code>starlink-setup.sh</code> applies all these settings (plus kernel-level
+    optimisations) in a single run. This guide is for users who want full
+    visibility into each change, or who need to apply settings manually on a
+    router that already has a custom configuration.
+  </div>
+</div>
+
+<!-- ========== PAGE: BEFORE YOU BEGIN ========== -->
+<div class="page">
+  <div class="section-header">
+    <div style="font-size:22pt;line-height:1">📋</div>
+    <h2>Before You Begin<span class="nav-path">Prerequisites and notes</span></h2>
+  </div>
+
+  <h3>What this guide covers</h3>
+  <p>
+    Starlink residential uses DHCPv6-PD to delegate an IPv6 /56 prefix to your
+    router. Out of the box, OpenWrt will not request this prefix or advertise it
+    to your LAN clients. This guide walks through the LuCI screens needed to:
+  </p>
+  <ul>
+    <li>Enable IPv6 on the WAN interface via DHCPv6-PD</li>
+    <li>Delegate a /64 to your LAN so clients get global IPv6 addresses</li>
+    <li>Fix the RA interval so addresses do not expire between advertisements</li>
+    <li>Set reliable DNS servers (Cloudflare + Google, IPv4 and IPv6)</li>
+    <li>Add the Starlink dish as an NTP source</li>
+    <li>Enable MSS clamping to prevent oversized packets being dropped</li>
+  </ul>
+
+  <h3>What this guide does NOT cover</h3>
+  <p>
+    Several optimisations in <code>starlink-setup.sh</code> require SSH access and
+    cannot be configured via LuCI. See <strong>Appendix A</strong> for details
+    (accept_ra hotplug, sysctl tuning, congestion control, conntrack timeouts).
+  </p>
+
+  <h3>Prerequisites</h3>
+  <ul>
+    <li>OpenWrt 25.x running <strong>fw4</strong> (nftables firewall)</li>
+    <li>Your WAN port is connected to the Starlink Ethernet adapter</li>
+    <li>You can reach LuCI — typically <strong>http://192.168.1.1</strong></li>
+    <li><strong>odhcpd-ipv6only</strong> package installed (included by default on OpenWrt 25.x)</li>
+  </ul>
+
+  <div class="callout warn">
+    <strong>⚠ Important — save after every section</strong>
+    Click <kbd>Save &amp; Apply</kbd> at the end of each section. Changes that are
+    not applied will be lost if you navigate away or the session times out.
+  </div>
+
+  <div class="callout note">
+    <strong>ℹ Preserve existing settings</strong>
+    If you already have a working WAN connection, only modify the specific fields
+    listed in each section. Do not change the <span class="ui">WAN</span> interface
+    protocol (keep it as DHCP) unless instructed.
+  </div>
+</div>
+
+<!-- ========== PAGE 1: IPv6 WAN ========== -->
+<div class="page">
+  <div class="section-header">
+    <div class="section-num">1</div>
+    <h2>IPv6 WAN Interface<span class="nav-path">Network › Interfaces › Add / Edit wan6</span></h2>
+  </div>
+
+  <p>
+    OpenWrt needs a separate <strong>wan6</strong> interface that requests an IPv6
+    address and prefix from Starlink using DHCPv6. On a fresh install this interface
+    may already exist; check before creating a new one.
+  </p>
+
+  <div class="nav-path-block">
+    Network <span class="sep">›</span> Interfaces
+  </div>
+
+  <h3>If wan6 already exists</h3>
+  <ol class="steps">
+    <li><p>Find the row labelled <span class="ui">wan6</span> and click <kbd>Edit</kbd>.</p></li>
+    <li><p>Confirm the settings in the table below and update any that differ.</p></li>
+    <li><p>Click <kbd>Save &amp; Apply</kbd>.</p></li>
+  </ol>
+
+  <h3>If wan6 does not exist</h3>
+  <ol class="steps">
+    <li><p>Click <kbd>Add new interface…</kbd>.</p></li>
+    <li><p>Set <span class="ui">Name</span> to <code>wan6</code>.</p></li>
+    <li><p>Set <span class="ui">Protocol</span> to <code>DHCPv6 client</code>.</p></li>
+    <li><p>Set <span class="ui">Device</span> to <code>@wan</code> (inherits the WAN physical device).</p></li>
+    <li><p>Click <kbd>Create interface</kbd>, then fill in the fields below.</p></li>
+  </ol>
+
+  <h3>Required field values — General Settings tab</h3>
+
+  <table class="field-table">
+    <thead><tr><th>Field</th><th>Value</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Protocol</td>
+        <td><code>DHCPv6 client</code></td>
+        <td>Must be DHCPv6, not static or SLAAC</td>
+      </tr>
+      <tr>
+        <td>Device</td>
+        <td><code>@wan</code></td>
+        <td>Shares the WAN Ethernet port</td>
+      </tr>
+      <tr>
+        <td>Request IPv6 address</td>
+        <td><code>try</code></td>
+        <td>Requests a IA_NA address if available; falls back gracefully</td>
+      </tr>
+      <tr>
+        <td>Request IPv6 prefix</td>
+        <td><code>auto</code></td>
+        <td>Requests prefix delegation (Starlink provides /56)</td>
+      </tr>
+      <tr>
+        <td>Use DNS advertised by peer</td>
+        <td><kbd>unchecked</kbd></td>
+        <td>We set our own DNS in Section 4; disable auto-discovery</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout tip">
+    <strong>✓ Tip — device field</strong>
+    <code>@wan</code> is an alias meaning "use the same physical device as the
+    <em>wan</em> interface." This avoids hard-coding <code>eth0</code> and works
+    even if the WAN port is renamed.
+  </div>
+
+  <div class="callout note">
+    <strong>ℹ Firewall zone</strong>
+    After creating wan6, go to the <span class="ui">Firewall Settings</span> tab
+    within the interface editor and assign it to the <code>wan</code> firewall zone.
+    This ensures incoming IPv6 traffic is filtered correctly.
+  </div>
+</div>
+
+<!-- ========== PAGE 2: ip6assign ========== -->
+<div class="page">
+  <div class="section-header">
+    <div class="section-num">2</div>
+    <h2>LAN Prefix Assignment<span class="nav-path">Network › Interfaces › LAN › Edit</span></h2>
+  </div>
+
+  <p>
+    Once the router receives a /56 from Starlink, it must sub-delegate a /64 to the
+    LAN bridge so that LAN clients can obtain global IPv6 addresses. This is
+    controlled by the <code>ip6assign</code> setting on the LAN interface.
+  </p>
+
+  <div class="nav-path-block">
+    Network <span class="sep">›</span> Interfaces <span class="sep">›</span> LAN <span class="sep">›</span> Edit
+  </div>
+
+  <ol class="steps">
+    <li><p>Click <kbd>Edit</kbd> next to the <span class="ui">LAN</span> interface.</p></li>
+    <li><p>Open the <span class="ui">Advanced Settings</span> tab.</p></li>
+    <li><p>Find <span class="ui">IPv6 assignment length</span> (also labelled <em>ip6assign</em> in older builds).</p></li>
+    <li><p>Set the value to <code>64</code>.</p></li>
+    <li><p>Click <kbd>Save &amp; Apply</kbd>.</p></li>
+  </ol>
+
+  <table class="field-table">
+    <thead><tr><th>Field</th><th>Value</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>IPv6 assignment length</td>
+        <td><code>64</code></td>
+        <td>Sub-assigns a /64 from the delegated /56 to br-lan</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout note">
+    <strong>ℹ Why /64 and not /60?</strong>
+    The official Starlink firmware uses <code>ip6assign=60</code> internally, but
+    that refers to its own internal topology. For an OpenWrt bypass router receiving
+    a /56 via DHCPv6-PD, <code>64</code> is the correct value — it grants each LAN
+    segment a standard /64 subnet with full SLAAC and DHCPv6 support.
+  </div>
+
+  <div class="callout tip">
+    <strong>✓ What to expect</strong>
+    After saving and restarting the network (or waiting ~30 seconds), your LAN
+    bridge should acquire a global IPv6 address such as
+    <code>2404:xxxx:xxxx:0001::1/64</code>. LAN clients will receive addresses
+    via SLAAC or DHCPv6 from odhcpd.
+  </div>
+</div>
+
+<!-- ========== PAGE 3: odhcpd ========== -->
+<div class="page">
+  <div class="section-header">
+    <div class="section-num">3</div>
+    <h2>odhcpd — RA Intervals<span class="nav-path">Network › DHCP and DNS › IPv6 RA Settings</span></h2>
+  </div>
+
+  <p>
+    Starlink delegates the /56 with short lifetimes — approximately
+    <strong>150 s preferred</strong> and <strong>300 s valid</strong>. odhcpd
+    renews the prefix every ~75 s, but LAN clients only learn about the renewed
+    lifetime when they receive a Router Advertisement (RA). With OpenWrt's default
+    <code>ra_maxinterval</code> of 600 s, the advertised preferred lifetime can
+    expire on clients <em>before the next RA arrives</em>, causing them to stop
+    using their IPv6 address for new connections.
+  </p>
+
+  <div class="callout danger">
+    <strong>🚨 This is the most common cause of IPv6 dropping on Starlink</strong>
+    Symptoms: IPv6 works immediately after reboot, then fails after a few minutes
+    on LAN clients, even though the router still has a global IPv6 address.
+    Reducing the RA interval fixes this.
+  </div>
+
+  <div class="nav-path-block">
+    Network <span class="sep">›</span> DHCP and DNS <span class="sep">›</span> IPv6 RA Settings <em>(or Interfaces › LAN › Edit › DHCP Server › IPv6 Settings)</em>
+  </div>
+
+  <div class="callout note">
+    <strong>ℹ Two paths in LuCI 25</strong>
+    In LuCI 25.x the RA interval fields may appear under <strong>Network › DHCP and
+    DNS › IPv6 RA Settings</strong> (global), or within the LAN interface editor
+    under the <strong>DHCP Server › IPv6 Settings</strong> tab. Use whichever path
+    exposes <em>RA Max Interval</em> for the LAN interface.
+  </div>
+
+  <ol class="steps">
+    <li><p>Navigate to the DHCP/DNS settings for the <span class="ui">LAN</span> interface.</p></li>
+    <li><p>Locate the <span class="ui">RA Max Interval</span> field (UCI: <code>ra_maxinterval</code>).</p></li>
+    <li><p>Set it to <code>60</code> seconds.</p></li>
+    <li><p>Locate the <span class="ui">RA Min Interval</span> field (UCI: <code>ra_mininterval</code>).</p></li>
+    <li><p>Set it to <code>20</code> seconds.</p></li>
+    <li><p>Ensure <span class="ui">RA mode</span> is set to <code>server</code> and <span class="ui">DHCPv6 mode</span> is set to <code>server</code>.</p></li>
+    <li><p>Click <kbd>Save &amp; Apply</kbd>.</p></li>
+  </ol>
+
+  <table class="field-table">
+    <thead><tr><th>Field (UCI key)</th><th>Value</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>RA Max Interval (<code>ra_maxinterval</code>)</td>
+        <td><code>60</code></td>
+        <td>Clients refresh lifetimes every ≤60 s — well within Starlink's 150 s preferred lifetime</td>
+      </tr>
+      <tr>
+        <td>RA Min Interval (<code>ra_mininterval</code>)</td>
+        <td><code>20</code></td>
+        <td>RFC 4861 §6.2.1 recommends ≥ max/3</td>
+      </tr>
+      <tr>
+        <td>RA mode (<code>ra</code>)</td>
+        <td><code>server</code></td>
+        <td>odhcpd sends RAs (not relay or disabled)</td>
+      </tr>
+      <tr>
+        <td>DHCPv6 mode (<code>dhcpv6</code>)</td>
+        <td><code>server</code></td>
+        <td>odhcpd responds to stateful DHCPv6 requests</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <strong>⚠ Do not use lifetime override options</strong>
+    Options such as <code>max_preferred_lifetime</code>, <code>max_valid_lifetime</code>,
+    <code>preferred_lft</code>, and <code>valid_lft</code> have no effect on Starlink's
+    prefix (it is already below the defaults) or are silently ignored. Use only the RA
+    interval fields above.
+  </div>
+</div>
+
+<!-- ========== PAGE 4: DNS ========== -->
+<div class="page">
+  <div class="section-header">
+    <div class="section-num">4</div>
+    <h2>DNS Servers<span class="nav-path">Network › Interfaces › WAN and WAN6 › Edit</span></h2>
+  </div>
+
+  <p>
+    Starlink's CGNAT and CDN routing mean that using ISP-provided DNS can result in
+    poor performance or, in some regions, incorrect responses. We disable peer DNS
+    on both WAN interfaces and set Cloudflare and Google resolvers explicitly.
+  </p>
+
+  <h3>WAN interface (IPv4 DNS)</h3>
+
+  <div class="nav-path-block">
+    Network <span class="sep">›</span> Interfaces <span class="sep">›</span> WAN <span class="sep">›</span> Edit <span class="sep">›</span> Advanced Settings
+  </div>
+
+  <ol class="steps">
+    <li><p>Click <kbd>Edit</kbd> on the <span class="ui">WAN</span> interface.</p></li>
+    <li><p>Open the <span class="ui">Advanced Settings</span> tab.</p></li>
+    <li><p>Uncheck <span class="ui">Use DNS servers advertised by peer</span>.</p></li>
+    <li><p>In the <span class="ui">Use custom DNS servers</span> field, add each address below (one per line or comma-separated).</p></li>
+    <li><p>Click <kbd>Save &amp; Apply</kbd>.</p></li>
+  </ol>
+
+  <table class="field-table">
+    <thead><tr><th>Field</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>Use DNS servers advertised by peer</td><td><kbd>unchecked</kbd></td></tr>
+      <tr><td>Custom DNS server 1</td><td><code>1.1.1.1</code> (Cloudflare)</td></tr>
+      <tr><td>Custom DNS server 2</td><td><code>1.0.0.1</code> (Cloudflare secondary)</td></tr>
+      <tr><td>Custom DNS server 3</td><td><code>8.8.8.8</code> (Google)</td></tr>
+      <tr><td>Custom DNS server 4</td><td><code>8.8.4.4</code> (Google secondary)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>WAN6 interface (IPv6 DNS)</h3>
+
+  <div class="nav-path-block">
+    Network <span class="sep">›</span> Interfaces <span class="sep">›</span> WAN6 <span class="sep">›</span> Edit <span class="sep">›</span> Advanced Settings
+  </div>
+
+  <ol class="steps">
+    <li><p>Click <kbd>Edit</kbd> on the <span class="ui">wan6</span> interface.</p></li>
+    <li><p>Open the <span class="ui">Advanced Settings</span> tab.</p></li>
+    <li><p>Uncheck <span class="ui">Use DNS servers advertised by peer</span>.</p></li>
+    <li><p>Add the IPv6 DNS addresses below.</p></li>
+    <li><p>Click <kbd>Save &amp; Apply</kbd>.</p></li>
+  </ol>
+
+  <table class="field-table">
+    <thead><tr><th>Field</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>Use DNS servers advertised by peer</td><td><kbd>unchecked</kbd></td></tr>
+      <tr><td>Custom DNS server 1</td><td><code>2606:4700:4700::1111</code> (Cloudflare)</td></tr>
+      <tr><td>Custom DNS server 2</td><td><code>2606:4700:4700::1001</code> (Cloudflare secondary)</td></tr>
+      <tr><td>Custom DNS server 3</td><td><code>2001:4860:4860::8888</code> (Google)</td></tr>
+      <tr><td>Custom DNS server 4</td><td><code>2001:4860:4860::8844</code> (Google secondary)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <strong>⚠ Starlink LAX4 CDN bug</strong>
+    In some regions, traffic to <code>1.1.1.1</code> is intercepted by a misbehaving
+    Starlink CDN node. Use <code>1.0.0.1</code> for connectivity tests and ping
+    monitoring instead of <code>1.1.1.1</code>.
+  </div>
+</div>
+
+<!-- ========== PAGE 5: NTP ========== -->
+<div class="page">
+  <div class="section-header">
+    <div class="section-num">5</div>
+    <h2>NTP — Starlink Dish GPS Clock<span class="nav-path">System › System › Time Synchronization</span></h2>
+  </div>
+
+  <p>
+    The Starlink dish exposes a GPS-disciplined NTP server at <code>192.168.100.1:123</code>
+    (the management IP of the dish, reachable over the Starlink Ethernet link).
+    It is a Stratum 1 source with ~85–123 µs accuracy — significantly better than
+    pool.ntp.org. Available on all current Starlink hardware since mid-2024.
+  </p>
+
+  <div class="nav-path-block">
+    System <span class="sep">›</span> System <span class="sep">›</span> Time Synchronization
+  </div>
+
+  <ol class="steps">
+    <li><p>Navigate to <span class="ui">System › System</span> and open the <span class="ui">Time Synchronization</span> tab.</p></li>
+    <li><p>In the <span class="ui">NTP server candidates</span> list, click <kbd>Add</kbd> (or type into the last empty field).</p></li>
+    <li><p>Enter <code>192.168.100.1</code>.</p></li>
+    <li><p>Leave the existing pool.ntp.org entries in place — the dish server complements them.</p></li>
+    <li><p>Ensure <span class="ui">Enable NTP client</span> is checked.</p></li>
+    <li><p>Click <kbd>Save &amp; Apply</kbd>.</p></li>
+  </ol>
+
+  <table class="field-table">
+    <thead><tr><th>Field</th><th>Value</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Enable NTP client</td>
+        <td><kbd>checked</kbd></td>
+        <td>Required to use any NTP servers</td>
+      </tr>
+      <tr>
+        <td>NTP server (add new)</td>
+        <td><code>192.168.100.1</code></td>
+        <td>Starlink dish · Stratum 1 · GPS-disciplined</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout tip">
+    <strong>✓ Keeping existing pool servers</strong>
+    The dish server is an <em>addition</em>, not a replacement. Keep the existing
+    <code>0.openwrt.pool.ntp.org</code> … <code>3.openwrt.pool.ntp.org</code>
+    entries so the router has fallback time sources if the dish is unreachable
+    (e.g. during a firmware update).
+  </div>
+
+  <div class="callout note">
+    <strong>ℹ Reachability</strong>
+    <code>192.168.100.1</code> is only reachable over the physical WAN port that
+    connects to the Starlink Ethernet adapter. It is not accessible from the LAN.
+  </div>
+</div>
+
+<!-- ========== PAGE 6: Flow offloading ========== -->
+<div class="page">
+  <div class="section-header">
+    <div class="section-num">6</div>
+    <h2>Software Flow Offloading<span class="nav-path">Network › Firewall › General Settings</span></h2>
+  </div>
+
+  <p>
+    Flow offloading accelerates forwarded traffic by bypassing the full Linux
+    networking stack for established connections. OpenWrt supports two modes:
+  </p>
+  <ul>
+    <li><strong>Software offloading</strong> — packets take a fast conntrack path
+        inside the kernel. The qdisc layer (fq_codel) still applies.</li>
+    <li><strong>Hardware offloading</strong> — packets are forwarded by the MediaTek
+        NPU, completely bypassing the kernel qdisc. fq_codel is <em>inactive</em>
+        when this is enabled.</li>
+  </ul>
+  <p>
+    For Starlink, software offloading is preferred: it gives near-hardware
+    performance while keeping fq_codel active for bufferbloat control.
+  </p>
+
+  <div class="nav-path-block">
+    Network <span class="sep">›</span> Firewall <span class="sep">›</span> General Settings
+  </div>
+
+  <ol class="steps">
+    <li><p>Open <span class="ui">Network › Firewall</span>.</p></li>
+    <li><p>On the <span class="ui">General Settings</span> tab, find the <span class="ui">Routing/NAT Offloading</span> section.</p></li>
+    <li><p>Check <span class="ui">Software flow offloading</span>.</p></li>
+    <li><p>Leave <span class="ui">Hardware flow offloading</span> <kbd>unchecked</kbd>.</p></li>
+    <li><p>Click <kbd>Save &amp; Apply</kbd>.</p></li>
+  </ol>
+
+  <table class="field-table">
+    <thead><tr><th>Field</th><th>Value</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Software flow offloading</td>
+        <td><kbd>checked</kbd> (on)</td>
+        <td>Fast conntrack path, qdisc still active</td>
+      </tr>
+      <tr>
+        <td>Hardware flow offloading</td>
+        <td><kbd>unchecked</kbd> (off)</td>
+        <td>Would bypass fq_codel; leave disabled</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout note">
+    <strong>ℹ Hardware offloading and fq_codel</strong>
+    When hardware flow offloading is enabled on MediaTek-based routers (MT3000,
+    MT7986, MT7981), the NPU handles forwarding and the Linux qdisc layer is
+    bypassed entirely. This makes fq_codel and cake ineffective. Disable hardware
+    offloading if you care about bufferbloat management.
+  </div>
+</div>
+
+<!-- ========== PAGE 7: MSS Clamping ========== -->
+<div class="page">
+  <div class="section-header">
+    <div class="section-num">7</div>
+    <h2>MSS Clamping (mtu_fix)<span class="nav-path">Network › Firewall › Zones › wan › Edit</span></h2>
+  </div>
+
+  <p>
+    MSS clamping prevents TCP sessions from using a segment size that, when
+    encapsulated in IPv6, would exceed the MTU of the Starlink link. Without it,
+    large packets may be silently dropped — causing connections to hang or stall
+    after the initial handshake.
+  </p>
+  <p>
+    In OpenWrt 24.10+ (including 25.12), enabling <code>mtu_fix</code> on the WAN
+    firewall zone causes fw4 to generate <strong>both</strong> ingress
+    (<code>mangle_forward</code>) and egress (<code>mangle_postrouting</code>)
+    clamp rules automatically. No custom nftables rules are needed.
+  </p>
+
+  <div class="callout warn">
+    <strong>⚠ Zone-level option only</strong>
+    <code>mtu_fix</code> is a <em>zone-level</em> option in fw4. Setting it under
+    <span class="ui">General Settings › Defaults</span> does nothing — it must be
+    set on the <strong>wan zone</strong> specifically.
+  </div>
+
+  <div class="nav-path-block">
+    Network <span class="sep">›</span> Firewall <span class="sep">›</span> Zones
+  </div>
+
+  <ol class="steps">
+    <li><p>Open <span class="ui">Network › Firewall</span> and click the <span class="ui">Zones</span> tab (or scroll to the zone list on the General Settings page).</p></li>
+    <li><p>Find the row for the <span class="ui">wan</span> zone (the zone covering your WAN and WAN6 interfaces).</p></li>
+    <li><p>Click <kbd>Edit</kbd> on the wan zone row.</p></li>
+    <li><p>Locate the <span class="ui">MSS clamping</span> checkbox (labelled <em>MSS clamping</em> in LuCI, UCI key: <code>mtu_fix</code>).</p></li>
+    <li><p>Check the box to enable it.</p></li>
+    <li><p>Click <kbd>Save &amp; Apply</kbd>.</p></li>
+  </ol>
+
+  <table class="field-table">
+    <thead><tr><th>Field (UCI key)</th><th>Value</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>MSS clamping (<code>mtu_fix</code>)</td>
+        <td><kbd>checked</kbd> (enabled)</td>
+        <td>Applies to the wan zone only</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout tip">
+    <strong>✓ Verifying the rules were applied</strong>
+    After saving, SSH to the router and run:
+    <div class="terminal">
+<span class="prompt">root@OpenWrt:~#</span> nft list chain inet fw4 mangle_postrouting | grep maxseg
+<span class="val">tcp flags syn / syn,rst tcp option maxseg size set rt mtu</span>
+<span class="prompt">root@OpenWrt:~#</span> nft list chain inet fw4 mangle_forward | grep maxseg
+<span class="val">tcp flags syn / syn,rst tcp option maxseg size set rt mtu</span>
+    </div>
+    Both lines must appear. If only one appears, the firewall package is older than
+    24.10 (fw4 bug <code>openwrt/openwrt#12112</code>) — upgrade the firmware.
+  </div>
+
+  <div class="callout note">
+    <strong>ℹ Drop-in nftables files are broken on 25.12</strong>
+    fw4 on OpenWrt 25.12 renders its entire ruleset as a single inline script.
+    A top-level <code>table</code> block in a drop-in file under
+    <code>/etc/nftables.d/</code> causes a syntax conflict. Do <em>not</em> add
+    custom clamp rules there — the <code>mtu_fix</code> checkbox is the correct
+    and only method.
+  </div>
+</div>
+
+<!-- ========== PAGE: Verification ========== -->
+<div class="page">
+  <div class="section-header">
+    <div style="font-size:22pt;line-height:1">✅</div>
+    <h2>Verification<span class="nav-path">Confirming IPv6 and MSS clamping are working</span></h2>
+  </div>
+
+  <p>
+    After applying all settings and clicking <kbd>Save &amp; Apply</kbd> on each
+    section, restart the network and wait ~30 seconds for DHCPv6-PD to complete.
+  </p>
+
+  <h3>In LuCI — Network › Interfaces</h3>
+  <p>Check that each interface shows a valid address:</p>
+  <ul>
+    <li><span class="ui">wan6</span> should show a global IPv6 address (e.g. <code>2404:xxxx::1/128</code> or similar)</li>
+    <li><span class="ui">LAN</span> should show a <code>/64</code> global IPv6 address (e.g. <code>2404:xxxx:xxxx:1::1/64</code>)</li>
+  </ul>
+
+  <h3>From a LAN client</h3>
+  <ul>
+    <li>The client should have a global IPv6 address (not just <code>fe80::</code> link-local)</li>
+    <li>Visit <strong>https://test-ipv6.com</strong> — should show 10/10</li>
+    <li>Ping: <code>ping6 ipv6.google.com</code></li>
+  </ul>
+
+  <h3>Via SSH (deeper checks)</h3>
+
+  <div class="terminal">
+<span class="comment"># WAN IPv6 address and delegated prefix</span>
+<span class="prompt">root@OpenWrt:~#</span> ip -6 addr show eth0
+<span class="comment"># Should show inet6 2404:xx... scope global</span>
+
+<span class="comment"># LAN delegated /64</span>
+<span class="prompt">root@OpenWrt:~#</span> ip -6 addr show br-lan | grep "scope global"
+
+<span class="comment"># IPv6 default route (via Starlink RA)</span>
+<span class="prompt">root@OpenWrt:~#</span> ip -6 route show default
+
+<span class="comment"># RA intervals (should be 60 and 20)</span>
+<span class="prompt">root@OpenWrt:~#</span> uci get dhcp.lan.ra_maxinterval
+<span class="val">60</span>
+<span class="prompt">root@OpenWrt:~#</span> uci get dhcp.lan.ra_mininterval
+<span class="val">20</span>
+
+<span class="comment"># MSS clamp rules — both must appear</span>
+<span class="prompt">root@OpenWrt:~#</span> nft list chain inet fw4 mangle_postrouting | grep maxseg
+<span class="prompt">root@OpenWrt:~#</span> nft list chain inet fw4 mangle_forward | grep maxseg
+
+<span class="comment"># accept_ra should be 2 on eth0 (if using SSH config)</span>
+<span class="prompt">root@OpenWrt:~#</span> cat /proc/sys/net/ipv6/conf/eth0/accept_ra
+  </div>
+
+  <div class="callout warn">
+    <strong>⚠ accept_ra may read 0 after reboot</strong>
+    If IPv6 stops working after a reboot, <code>accept_ra</code> may have been
+    reset to 0 by netifd. This cannot be fixed via LuCI. See Appendix A for the
+    SSH-based fix (sysctl + hotplug script).
+  </div>
+</div>
+
+<!-- ========== PAGE: APPENDIX A ========== -->
+<div class="page">
+  <div class="section-header">
+    <div style="font-size:22pt;line-height:1">A</div>
+    <h2>Settings Not Available in LuCI<span class="nav-path">Requires SSH access</span></h2>
+  </div>
+
+  <p>
+    The following settings are applied by <code>starlink-setup.sh</code> but
+    cannot be configured through the LuCI web interface. They require SSH access
+    to the router.
+  </p>
+
+  <h3>accept_ra=2 — persistent fix</h3>
+  <p>
+    Linux resets <code>accept_ra</code> to 0 when IPv6 forwarding is enabled
+    (<code>forwarding=1</code>). This causes the router to ignore Starlink's IPv6
+    Router Advertisements and lose the default IPv6 route. The fix requires three
+    layers (sysctl.conf, immediate sysctl -w, and a hotplug script) — none of
+    which have LuCI counterparts.
+  </p>
+
+  <div class="terminal">
+<span class="comment"># Add to /etc/sysctl.conf</span>
+net.ipv6.conf.all.accept_ra = 2
+net.ipv6.conf.default.accept_ra = 2
+
+<span class="comment"># Apply immediately</span>
+<span class="prompt">root@OpenWrt:~#</span> sysctl -w net.ipv6.conf.eth0.accept_ra=2
+
+<span class="comment"># Hotplug: /etc/hotplug.d/iface/25-accept_ra</span>
+[ "$ACTION" = ifup ] &amp;&amp; [ "$INTERFACE" = wan6 ] &amp;&amp; \
+    sysctl -w net.ipv6.conf.eth0.accept_ra=2
+  </div>
+
+  <h3>Congestion control (kmod-tcp-hybla)</h3>
+  <p>
+    <code>kmod-tcp-hybla</code> normalises TCP congestion window growth against a
+    25 ms reference RTT, reducing penalty on higher-latency links. Install via:
+  </p>
+  <div class="terminal">
+<span class="prompt">root@OpenWrt:~#</span> apk add kmod-tcp-hybla
+<span class="prompt">root@OpenWrt:~#</span> echo "net.ipv4.tcp_congestion_control = hybla" >> /etc/sysctl.conf
+<span class="prompt">root@OpenWrt:~#</span> sysctl -p
+  </div>
+
+  <h3>fq_codel as default qdisc</h3>
+  <div class="terminal">
+<span class="prompt">root@OpenWrt:~#</span> echo "net.core.default_qdisc = fq_codel" >> /etc/sysctl.conf
+<span class="prompt">root@OpenWrt:~#</span> sysctl -p
+  </div>
+
+  <h3>Conntrack timeout tuning</h3>
+  <p>
+    From the official Starlink firmware. Prevents long-lived NAT sessions (e.g.
+    SSH tunnels, VPNs) from being dropped after the default 30-minute idle timeout.
+  </p>
+  <div class="terminal">
+net.netfilter.nf_conntrack_tcp_timeout_established = 7440
+net.netfilter.nf_conntrack_udp_timeout = 60
+net.netfilter.nf_conntrack_udp_timeout_stream = 180
+  </div>
+
+  <div class="callout tip">
+    <strong>✓ Use the script for all of the above</strong>
+    Running <code>starlink-setup.sh</code> applies all LuCI settings AND the SSH-only
+    settings in a single step, with idempotent re-run safety. The script is available
+    at the project repository. Donate: <strong>paypal.me/bergfirmware</strong>
+  </div>
+</div>
+
+</body>
+</html>
