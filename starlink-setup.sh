@@ -113,21 +113,29 @@ fi
 
 # --- 3. DNS ---
 if [ "$FIRST_RUN" = "1" ]; then
-    echo "[3/7] Configuring DNS..."
-    uci set network.wan.peerdns='0'
-    uci -q delete network.wan.dns || true
-    uci add_list network.wan.dns='1.1.1.1'
-    uci add_list network.wan.dns='1.0.0.1'
-    uci add_list network.wan.dns='8.8.8.8'
-    uci add_list network.wan.dns='8.8.4.4'
-    uci set network.wan6.peerdns='0'
-    uci -q delete network.wan6.dns || true
-    uci add_list network.wan6.dns='2606:4700:4700::1111'
-    uci add_list network.wan6.dns='2606:4700:4700::1001'
-    uci add_list network.wan6.dns='2001:4860:4860::8888'
-    uci add_list network.wan6.dns='2001:4860:4860::8844'
-    uci commit network
-    echo "      Done."
+    # Skip if the user has already configured custom DNS (peerdns=0 with explicit
+    # entries) — e.g. Technitium, Pi-hole, AdGuard Home. Override with FORCE_DNS=1.
+    EXISTING_DNS=$(uci -q get network.wan.dns || true)
+    if [ -n "$EXISTING_DNS" ] && [ "${FORCE_DNS:-0}" != "1" ]; then
+        echo "[3/7] DNS — skipping (custom DNS already set: $EXISTING_DNS)."
+        echo "      To overwrite with Cloudflare+Google: FORCE_DNS=1 sh /tmp/starlink-setup.sh"
+    else
+        echo "[3/7] Configuring DNS (Cloudflare + Google)..."
+        uci set network.wan.peerdns='0'
+        uci -q delete network.wan.dns || true
+        uci add_list network.wan.dns='1.1.1.1'
+        uci add_list network.wan.dns='1.0.0.1'
+        uci add_list network.wan.dns='8.8.8.8'
+        uci add_list network.wan.dns='8.8.4.4'
+        uci set network.wan6.peerdns='0'
+        uci -q delete network.wan6.dns || true
+        uci add_list network.wan6.dns='2606:4700:4700::1111'
+        uci add_list network.wan6.dns='2606:4700:4700::1001'
+        uci add_list network.wan6.dns='2001:4860:4860::8888'
+        uci add_list network.wan6.dns='2001:4860:4860::8844'
+        uci commit network
+        echo "      Done."
+    fi
 else
     echo "[3/7] DNS — skipping (already configured)."
 fi
